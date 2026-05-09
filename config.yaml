@@ -3,7 +3,7 @@
 models:
   light_command: null
   radio_mode: claude-sonnet-4-6
-  chat_mode: claude-opus-4-7
+  chat_mode: claude-opus-4-6
   consolidation: claude-opus-4-7
   cold_start: claude-opus-4-7
 
