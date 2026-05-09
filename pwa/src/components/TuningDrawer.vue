@@ -61,7 +61,7 @@ const emit = defineEmits(['close', 'apply']);
 
 const local = reactive({
   exploration_pct: 30,
-  queue_length: 5,
+  queue_length: 10,
   chattiness: 'medium',
 });
 

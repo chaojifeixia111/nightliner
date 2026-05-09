@@ -36,7 +36,7 @@ let playHistory = [];
 // In-memory tuning state
 let tuning = {
   exploration_pct: 30,
-  queue_length: 5,
+  queue_length: 10,
   chattiness: 'medium',
 };
 
@@ -110,9 +110,23 @@ app.post('/api/chat', async (req, res) => {
     const resolved = await resolvePlayList(parsed.play);
     const playable = resolved.filter(s => s.found);
 
+    // Compute stats early so we can log them with queueAction
+    const snapshotNorm = await getSnapshotNorm();
+    let library_hits = 0;
+    let recommend = 0;
+    let wildcard = 0;
+    for (let i = 0; i < parsed.play?.length; i++) {
+      const sp = parsed.play[i]?.source_pool || '';
+      if (sp === 'library') library_hits++;
+      else if (sp === 'recommend') recommend++;
+      else wildcard++;
+    }
+    console.log(`[chat] queueAction=${parsed.queueAction}, library_hits=${library_hits}/${parsed.play?.length || 0}`);
+
     if (parsed.queueAction === 'rewrite_tail' && currentQueue.length) {
       const idxNow = now ? currentQueue.findIndex(s => s.title === now.title) : -1;
-      const head = idxNow >= 0 ? currentQueue.slice(0, idxNow + 1) : [];
+      // Keep only the currently playing song (not history), then append new playable
+      const head = idxNow >= 0 ? [currentQueue[idxNow]] : [];
       currentQueue = [...head, ...playable];
     } else if (parsed.queueAction === 'insert_next') {
       const idxNow = now ? currentQueue.findIndex(s => s.title === now.title) : -1;
@@ -138,17 +152,7 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // Compute and broadcast stats
-    const snapshotNorm = await getSnapshotNorm();
-    let library_hits = 0;
-    let recommend = 0;
-    let wildcard = 0;
-    for (let i = 0; i < parsed.play?.length; i++) {
-      const sp = parsed.play[i]?.source_pool || '';
-      if (sp === 'library') library_hits++;
-      else if (sp === 'recommend') recommend++;
-      else wildcard++;
-    }
+    // Broadcast stats
     const vip_skipped = resolved.filter(s => !s.found && s.ncm_id).length;
     const not_found = resolved.filter(s => !s.found && !s.ncm_id).length;
     broadcast({

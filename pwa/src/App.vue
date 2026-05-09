@@ -47,7 +47,7 @@ const lastStats = ref(null);
 const state = reactive({
   now: null,
   queue: [],
-  tuning: { exploration_pct: 30, queue_length: 5, chattiness: 'medium' },
+  tuning: { exploration_pct: 30, queue_length: 10, chattiness: 'medium' },
 });
 
 let ws;
