@@ -5,6 +5,7 @@ import db, { recentPlays, recentFeedback, antiList, activeCooldowns } from './st
 
 const TEMPLATE_PATH = 'prompts/chat-mode.md';
 const SNAPSHOT_PATH = 'data/netease-snapshot.json';
+const APPLE_MD_PATH = 'user/apple-music-favorites-2024-2026.md';
 
 // Playlist ID → chapter tag
 const PLAYLIST_TAG = {
@@ -47,6 +48,23 @@ async function buildLibrarySlice() {
   for (const [, s] of seen) {
     lines.push(`${idx}. ${s.name} / ${s.artists} [${s.tag}]`);
     idx++;
+  }
+
+  // Append Apple Music library (Melted 章节,2024-2026)
+  try {
+    const md = await fs.readFile(APPLE_MD_PATH, 'utf8');
+    // Match lines like "  1. Title / Artist" (allow leading spaces, allow no leading spaces)
+    const trackPattern = /^\s*\d+\.\s+(.+?)\s+\/\s+(.+?)\s*$/gm;
+    let m;
+    while ((m = trackPattern.exec(md)) !== null) {
+      const title = m[1].trim();
+      const artist = m[2].trim();
+      if (!title || !artist) continue;
+      lines.push(`${idx}. ${title} / ${artist} [M]`);
+      idx++;
+    }
+  } catch {
+    // Apple Music file optional
   }
 
   _libraryCache = lines.join('\n');

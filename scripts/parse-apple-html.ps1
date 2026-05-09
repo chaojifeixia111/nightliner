@@ -13,17 +13,21 @@ if (-not (Test-Path $InputHtml)) {
 
 $html = Get-Content $InputHtml -Raw -Encoding UTF8
 
-# 1. Extract JSON-LD metadata
+# 1. Try JSON-LD metadata; fall back to <title> + today's date
 $jsonPattern = '<script id="schema:music-playlist" type="application/ld\+json">([\s\S]+?)</script>'
 $jsonMatch = [regex]::Match($html, $jsonPattern)
-if (-not $jsonMatch.Success) {
-    Write-Error "JSON-LD playlist schema not found"
-    exit 1
+if ($jsonMatch.Success) {
+    $meta = $jsonMatch.Groups[1].Value | ConvertFrom-Json
+    $numTracks = $meta.numTracks
+    $datePublished = $meta.datePublished
+    $playlistName = $meta.name
+} else {
+    Write-Warning "JSON-LD not found; falling back to <title> + today's date"
+    $titleMatch = [regex]::Match($html, '<title>([^<]+)</title>')
+    $playlistName = if ($titleMatch.Success) { ($titleMatch.Groups[1].Value -split ' - ')[0] } else { 'Favorite Songs' }
+    $datePublished = (Get-Date -Format 'yyyy-MM-dd')
+    $numTracks = 0  # determined from aria-label count below
 }
-$meta = $jsonMatch.Groups[1].Value | ConvertFrom-Json
-$numTracks = $meta.numTracks
-$datePublished = $meta.datePublished
-$playlistName = $meta.name
 
 # 2. Extract song-artist pairs from aria-labels
 $pattern = 'aria-label="播放(.+?)的《(.+?)》"'
@@ -38,10 +42,11 @@ foreach ($m in $allMatches) {
     if (-not $seen.ContainsKey($key)) {
         $tracks += [PSCustomObject]@{ Title = $title; Artist = $artist }
         $seen[$key] = $true
-        if ($tracks.Count -ge $numTracks) { break }
+        if ($numTracks -gt 0 -and $tracks.Count -ge $numTracks) { break }
     }
 }
 
+if ($numTracks -eq 0) { $numTracks = $tracks.Count }
 if ($tracks.Count -ne $numTracks) {
     Write-Warning "Extracted $($tracks.Count) tracks but expected $numTracks. Output anyway."
 }
