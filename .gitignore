@@ -8,3 +8,7 @@ pwa/dist/
 .env
 .DS_Store
 Thumbs.db
+
+# 用户灵魂文件 - 不进版本控制(隐私边界)
+user/
+data/netease-qr.png
