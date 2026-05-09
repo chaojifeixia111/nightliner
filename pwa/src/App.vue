@@ -1,30 +1,45 @@
 <template>
   <div class="app-shell">
-    <AppHeader @open-tuning="tuningOpen = true" />
-    <ClockCard />
-    <Player :state="state" @feedback="onFeedback" @skip="onSkip" />
-    <QueuePreview :queue="state.queue" :now="state.now" />
+    <AppHeader @open-tuning="tuningOpen = true" @open-queue="queueOpen = true" />
+    <HeroCard
+      :state="state"
+      @feedback="onFeedback"
+      @skip="onSkip"
+      @previous="onPrevious"
+      @user-message="pushDjMessage"
+    />
     <DJLog :messages="djMessages" :thinking="thinking" :stats="lastStats" />
     <ChatInput @send="onChat" />
     <StatusBar :connected="connected" />
-    <TuningDrawer :open="tuningOpen" :tuning="state.tuning" @close="tuningOpen = false" @apply="onApplyTuning" />
+    <TuningDrawer
+      :open="tuningOpen"
+      :tuning="state.tuning"
+      @close="tuningOpen = false"
+      @apply="onApplyTuning"
+    />
+    <QueueDrawer
+      :open="queueOpen"
+      :queue="state.queue"
+      :now="state.now"
+      @close="queueOpen = false"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import AppHeader from './components/AppHeader.vue';
-import ClockCard from './components/ClockCard.vue';
-import Player from './components/Player.vue';
-import QueuePreview from './components/QueuePreview.vue';
+import HeroCard from './components/HeroCard.vue';
 import DJLog from './components/DJLog.vue';
 import ChatInput from './components/ChatInput.vue';
 import StatusBar from './components/StatusBar.vue';
 import TuningDrawer from './components/TuningDrawer.vue';
+import QueueDrawer from './components/QueueDrawer.vue';
 import { connectWs, sendFeedback } from './ws-client.js';
 
 const connected = ref(false);
 const tuningOpen = ref(false);
+const queueOpen = ref(false);
 const thinking = ref(false);
 const djMessages = ref([]);
 const lastStats = ref(null);
@@ -84,6 +99,10 @@ function onSkip() {
   });
 }
 
+function onPrevious() {
+  fetch('/api/previous', { method: 'POST' }).catch(() => {});
+}
+
 function onApplyTuning(newTuning) {
   fetch('/api/tuning', {
     method: 'POST',
@@ -96,6 +115,10 @@ function onApplyTuning(newTuning) {
 
 <style scoped>
 .app-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding-top: 8px;
+  min-height: calc(100vh - 28px);
 }
 </style>

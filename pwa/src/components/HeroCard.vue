@@ -1,0 +1,564 @@
+<template>
+  <div class="hero-card">
+    <!-- Time row -->
+    <div class="time-row">
+      <div class="time-left">
+        <span class="clock-time">{{ timeStr }}</span>
+        <span class="clock-date">{{ dateStr }}</span>
+      </div>
+      <div class="on-air">
+        <span class="air-dot">●</span>
+        <span class="air-label">ON AIR</span>
+      </div>
+    </div>
+
+    <!-- Album cover -->
+    <div class="cover-wrap">
+      <div class="cover-frame" :class="{ 'has-cover': state.now?.pic_url }">
+        <img
+          v-if="state.now?.pic_url"
+          :src="state.now.pic_url"
+          :alt="state.now.title"
+          class="cover-img"
+        />
+        <span v-else class="cover-empty">○ no signal</span>
+      </div>
+    </div>
+
+    <!-- Song info -->
+    <template v-if="state.now">
+      <div class="song-title">{{ state.now.title }}</div>
+      <div class="song-artist">{{ state.now.ncm_artist || state.now.artist }}</div>
+      <div v-if="state.now.memoryLink" class="memory-link">[ {{ state.now.memoryLink }} ]</div>
+    </template>
+    <div v-else class="empty-info">( no signal · chat to start )</div>
+
+    <!-- Progress bar -->
+    <div v-if="state.now" class="progress-wrap">
+      <span class="time-label">{{ fmtTime(currentSec) }}</span>
+      <div class="progress-track" @mousedown="onSeekStart" @touchstart.passive="onSeekStart">
+        <div class="progress-fill" :style="{ width: progressPct + '%' }"></div>
+        <div class="progress-thumb" :style="{ left: progressPct + '%' }"></div>
+      </div>
+      <span class="time-label">{{ fmtTime(durationSec) }}</span>
+    </div>
+
+    <!-- Controls row -->
+    <div class="controls-row">
+      <!-- Transport buttons -->
+      <button class="ctrl-btn" title="上一首" @click="onPrevious">⏮</button>
+      <button class="ctrl-btn play-btn" @click="togglePlay">{{ paused ? '▶' : '⏸' }}</button>
+      <button class="ctrl-btn" title="跳过" @click="onSkip">⏭</button>
+
+      <div class="ctrl-spacer"></div>
+
+      <!-- Expandable feedback -->
+      <div
+        class="feedback-wrap"
+        @mouseenter="feedbackExpanded = true"
+        @mouseleave="feedbackExpanded = false"
+      >
+        <transition name="feedback-expand">
+          <div v-if="feedbackExpanded" class="feedback-extra">
+            <button
+              class="fb-btn"
+              :class="{ flashed: flashedSignal === 'never_again' }"
+              title="别再播"
+              @click="sendFeedback('never_again')"
+            >🚫</button>
+            <button
+              class="fb-btn"
+              :class="{ flashed: flashedSignal === 'too_familiar' }"
+              title="太熟了"
+              @click="sendFeedback('too_familiar')"
+            >🔁</button>
+            <button
+              class="fb-btn"
+              :class="{ flashed: flashedSignal === 'wrong_vibe' }"
+              title="不对味"
+              @click="sendFeedback('wrong_vibe')"
+            >✗</button>
+          </div>
+        </transition>
+        <button
+          class="fb-btn fb-heart"
+          :class="{ flashed: flashedSignal === 'love' }"
+          title="喜欢"
+          @click="sendFeedback('love')"
+        >♥</button>
+      </div>
+
+      <!-- Volume -->
+      <div class="volume-wrap">
+        <button class="ctrl-btn vol-btn" @click="toggleMute" title="静音">{{ muted ? '🔇' : '🔊' }}</button>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          step="1"
+          v-model.number="volume"
+          class="vol-slider"
+          @input="onVolumeChange"
+        />
+      </div>
+    </div>
+
+    <audio
+      ref="audio"
+      :src="state.now?.url"
+      autoplay
+      @ended="onEnded"
+      @timeupdate="onTimeUpdate"
+      @loadedmetadata="onMeta"
+    />
+  </div>
+</template>
+
+<script setup>
+import { ref, watch, onMounted, onUnmounted } from 'vue';
+
+const props = defineProps({ state: Object });
+const emit = defineEmits(['feedback', 'skip', 'previous', 'user-message']);
+
+// Clock state
+const timeStr = ref('');
+const dateStr = ref('');
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  timeStr.value = `${h}:${m}`;
+  dateStr.value = `${DAYS[now.getDay()]} · ${String(now.getDate()).padStart(2, '0')} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+}
+
+let clockTimer;
+onMounted(() => { updateClock(); clockTimer = setInterval(updateClock, 1000); });
+onUnmounted(() => clearInterval(clockTimer));
+
+// Audio state
+const audio = ref(null);
+const paused = ref(false);
+const muted = ref(false);
+const volume = ref(80);
+const currentSec = ref(0);
+const durationSec = ref(0);
+const progressPct = ref(0);
+let lastReportedSec = 0;
+let seeking = false;
+
+// Feedback expand state
+const feedbackExpanded = ref(false);
+const flashedSignal = ref(null);
+
+function fmtTime(sec) {
+  const s = Math.floor(sec || 0);
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function onTimeUpdate() {
+  if (!audio.value || seeking) return;
+  currentSec.value = audio.value.currentTime;
+  durationSec.value = audio.value.duration || 0;
+  lastReportedSec = Math.floor(audio.value.currentTime);
+  progressPct.value = durationSec.value > 0 ? (currentSec.value / durationSec.value) * 100 : 0;
+}
+
+function onMeta() {
+  if (audio.value) durationSec.value = audio.value.duration || 0;
+}
+
+function togglePlay() {
+  if (!audio.value) return;
+  if (audio.value.paused) { audio.value.play(); paused.value = false; }
+  else { audio.value.pause(); paused.value = true; }
+}
+
+function toggleMute() {
+  if (!audio.value) return;
+  muted.value = !muted.value;
+  audio.value.muted = muted.value;
+}
+
+function onVolumeChange() {
+  if (!audio.value) return;
+  audio.value.volume = volume.value / 100;
+}
+
+function onEnded() {
+  reportPlayEvent('natural', Math.floor(audio.value?.duration || 0));
+}
+
+function onSkip() {
+  if (!props.state.now) return;
+  emit('skip');
+  reportPlayEvent('user_skip', lastReportedSec);
+}
+
+function onPrevious() {
+  emit('previous');
+}
+
+function onSeekStart(e) {
+  if (!audio.value) return;
+  seeking = true;
+  const move = (ev) => {
+    const track = e.currentTarget;
+    const rect = track.getBoundingClientRect();
+    const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    progressPct.value = pct * 100;
+  };
+  const end = (ev) => {
+    seeking = false;
+    const track = e.currentTarget;
+    const rect = track.getBoundingClientRect();
+    const clientX = ev.changedTouches ? ev.changedTouches[0].clientX : ev.clientX;
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    if (audio.value && durationSec.value > 0) {
+      audio.value.currentTime = pct * durationSec.value;
+    }
+    window.removeEventListener('mousemove', move);
+    window.removeEventListener('mouseup', end);
+    window.removeEventListener('touchmove', move);
+    window.removeEventListener('touchend', end);
+  };
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+  window.addEventListener('touchmove', move, { passive: true });
+  window.addEventListener('touchend', end);
+}
+
+watch(() => props.state.now?.title, (newTitle, oldTitle) => {
+  if (oldTitle && oldTitle !== newTitle) lastReportedSec = 0;
+  currentSec.value = 0;
+  durationSec.value = 0;
+  progressPct.value = 0;
+  paused.value = false;
+});
+
+function reportPlayEvent(reason, playedSec) {
+  if (!props.state.now) return;
+  fetch('/api/play-event', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: props.state.now.title,
+      artist: props.state.now.artist,
+      duration_sec: Math.floor(audio.value?.duration || 0),
+      played_sec: playedSec,
+      ended_reason: reason,
+    }),
+  });
+}
+
+const SIGNAL_LABELS = {
+  love: '♥ love',
+  wrong_vibe: '✗ wrong_vibe',
+  too_familiar: '🔁 too_familiar',
+  never_again: '🚫 never_again',
+};
+
+function sendFeedback(signal) {
+  emit('feedback', signal);
+  flashedSignal.value = signal;
+  setTimeout(() => { flashedSignal.value = null; }, 600);
+  // Push local user reaction message
+  emit('user-message', {
+    ts: new Date().toISOString(),
+    kind: 'reaction',
+    text: SIGNAL_LABELS[signal] || signal,
+  });
+}
+</script>
+
+<style scoped>
+.hero-card {
+  background:
+    radial-gradient(ellipse 60% 30% at 50% 0%, var(--blue-glow), transparent 70%),
+    var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Time row */
+.time-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 16px;
+}
+.time-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.clock-time {
+  font-family: 'VT323', monospace;
+  font-size: 28px;
+  color: var(--accent);
+  line-height: 1;
+}
+.clock-date {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+.on-air {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+.air-dot {
+  color: var(--blue);
+  animation: pulse 1.4s ease-in-out infinite;
+  text-shadow: 0 0 6px var(--blue);
+}
+.air-label {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--accent);
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+/* Album cover */
+.cover-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.cover-frame {
+  width: 240px;
+  height: 240px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.cover-frame:not(.has-cover) {
+  border-style: dashed;
+}
+.cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cover-empty {
+  font-size: 13px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+/* Song info */
+.song-title {
+  font-family: 'VT323', monospace;
+  font-size: 32px;
+  color: var(--accent);
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+.song-artist {
+  font-size: 13px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 6px;
+}
+.memory-link {
+  display: inline-block;
+  font-size: 11px;
+  font-variant: small-caps;
+  color: var(--accent);
+  border: 1px solid var(--blue);
+  background: var(--blue-glow);
+  padding: 2px 8px;
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 0 12px rgba(74, 127, 219, 0.15);
+}
+.empty-info {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 16px 0 12px;
+  font-size: 13px;
+}
+
+/* Progress */
+.progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 8px;
+}
+.time-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  min-width: 36px;
+}
+.progress-track {
+  flex: 1;
+  height: 6px;
+  background: #0a1024;
+  border: 1px solid var(--border);
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--blue) 0%, var(--accent) 100%);
+  box-shadow: 0 0 8px rgba(74, 127, 219, 0.5);
+  pointer-events: none;
+}
+.progress-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+  border: 1px solid var(--bg);
+  pointer-events: none;
+}
+
+/* Controls row */
+.controls-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.ctrl-spacer { flex: 1; }
+.ctrl-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 14px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  border-radius: 2px;
+}
+.ctrl-btn:hover {
+  color: var(--accent);
+  border-color: var(--blue);
+  background: var(--blue-glow);
+}
+.play-btn {
+  font-size: 16px;
+  width: 44px;
+  height: 44px;
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* Feedback expand */
+.feedback-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+}
+.feedback-extra {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.fb-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 14px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  border-radius: 2px;
+}
+.fb-btn:hover {
+  color: var(--accent);
+  border-color: var(--blue);
+}
+.fb-heart {
+  color: var(--accent);
+  border-color: var(--blue);
+}
+.fb-btn.flashed {
+  background: var(--blue-glow);
+  border-color: var(--blue);
+  color: var(--accent);
+}
+.feedback-expand-enter-active,
+.feedback-expand-leave-active {
+  transition: opacity 0.2s, transform 0.2s;
+}
+.feedback-expand-enter-from,
+.feedback-expand-leave-to {
+  opacity: 0;
+  transform: translateX(8px);
+}
+
+/* Volume */
+.volume-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.vol-btn {
+  font-size: 13px;
+}
+.vol-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 80px;
+  height: 4px;
+  background: #0a1024;
+  border: 1px solid var(--border);
+  outline: none;
+  cursor: pointer;
+}
+.vol-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  cursor: pointer;
+  border: 1px solid var(--bg);
+  border-radius: 50%;
+}
+.vol-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  cursor: pointer;
+  border: 1px solid var(--bg);
+  border-radius: 50%;
+}
+</style>
