@@ -23,24 +23,40 @@ function onSubmit() {
 </script>
 
 <style scoped>
-.chat { display: flex; gap: 8px; margin-top: 16px; }
+.chat {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
 input {
   flex: 1;
-  padding: 12px;
-  background: #1a1a1a;
-  border: 1px solid #333;
-  color: #fff;
-  border-radius: 8px;
-  font-size: 14px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
 }
-input:focus { outline: none; border-color: #555; }
+input:focus { border-color: var(--accent-dim); }
+input::placeholder { color: var(--text-dim); }
 button {
-  padding: 12px 24px;
-  background: #2a4a8a;
-  border: none;
-  color: #fff;
-  border-radius: 8px;
+  padding: 10px 20px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-dim);
+  color: var(--bg);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 1px;
   cursor: pointer;
+  transition: background 0.15s;
 }
-button:disabled { background: #333; color: #666; cursor: not-allowed; }
+button:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); }
+button:disabled {
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
 </style>
