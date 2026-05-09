@@ -71,9 +71,17 @@ export async function resolvePlayList(plays) {
       }
       const norm = normalizeSong(best);
       const urlResp = await songUrl(best.id, level);
-      const url = urlResp?.data?.[0]?.url;
+      const data0 = urlResp?.data?.[0];
+      const url = data0?.url;
       if (!url) {
-        console.warn(`[playback] 命中但无 URL(可能仅 VIP): ${norm.name} / ${norm.artistName}`);
+        // 详细诊断:fee=1=VIP独享,fee=4=专辑数字售卖,code 非 200 = 鉴权问题
+        const diag = {
+          fee: data0?.fee,
+          code: data0?.code,
+          freeTrial: data0?.freeTrialPrivilege?.resConsumable,
+          level: data0?.level,
+        };
+        console.warn(`[playback] 命中但无 URL: ${norm.name} / ${norm.artistName} | ${JSON.stringify(diag)}`);
         resolved.push({ ...entry, ncm_id: best.id });
         continue;
       }

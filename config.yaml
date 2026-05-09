@@ -25,7 +25,8 @@ playback:
 
 ncm:
   api_base: http://localhost:3000
-  song_url_level: standard
+  # 音质档:standard(128k) / higher(192k) / exhigh(320k) / lossless(FLAC,VIP) / hires(VIP)
+  song_url_level: exhigh
 
 consolidation:
   enabled: false

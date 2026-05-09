@@ -20,8 +20,11 @@ async function ncmRequest(endpoint, params = {}) {
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null) url.searchParams.set(k, v);
   }
+  // 双管齐下:URL 参数 + HTTP Header 都带 cookie,确保 NCM API 内部转发到网易云时能认证
   if (cookie) url.searchParams.set('cookie', cookie);
-  const r = await fetch(url, { method: 'GET' });
+  const headers = {};
+  if (cookie) headers['Cookie'] = cookie;
+  const r = await fetch(url, { method: 'GET', headers });
   if (!r.ok) throw new Error(`NCM ${endpoint} HTTP ${r.status}`);
   return r.json();
 }
