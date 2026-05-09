@@ -39,12 +39,23 @@ async function main() {
 
   console.log('>>> DJ:');
   console.log('say:', parsed.say);
+
+  console.log('\n解析直链(网易云搜索 + song_url)...');
+  const { resolvePlayList } = await import('../server/playback-coordinator.js');
+  const resolved = await resolvePlayList(parsed.play);
+
   console.log('\nplay:');
-  parsed.play.forEach((s, i) => {
-    console.log(`  ${i + 1}. ${s.title} / ${s.artist}`);
-    console.log(`     reason: ${s.reason}`);
-    console.log(`     memoryLink: ${s.memoryLink || 'null'}`);
-    console.log(`     confidence: ${s.confidence}`);
+  resolved.forEach((s, i) => {
+    const orig = parsed.play[i];
+    const status = s.found ? '✓' : '✗';
+    console.log(`  ${i + 1}. ${status} ${s.title} / ${s.artist}`);
+    console.log(`     reason: ${orig.reason}`);
+    if (s.found) {
+      console.log(`     ncm: ${s.ncm_name} / ${s.ncm_artist}`);
+      console.log(`     url: ${s.url.substring(0, 80)}...`);
+    } else {
+      console.log(`     ✗ 未找到可播放直链(从 queue 删除)`);
+    }
   });
   if (parsed.queueAction) console.log(`\nqueueAction: ${parsed.queueAction}`);
 }
