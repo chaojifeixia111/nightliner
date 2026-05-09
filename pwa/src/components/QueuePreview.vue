@@ -1,30 +1,94 @@
 <template>
-  <div class="queue-preview">
-    <div v-if="upcoming.length === 0" class="empty">(queue 已结束)</div>
-    <div v-else>
-      <div class="next">→ {{ upcoming[0].title }} - {{ upcoming[0].artist }}</div>
-      <div v-if="upcoming.length > 1" class="rest">
-        ... 还有 {{ upcoming.length - 1 }} 首
+  <div class="queue-card">
+    <div class="card-label">┌─ QUEUE ─┐</div>
+    <div v-if="!queue || queue.length === 0" class="empty">
+      ( queue empty · chat to start )
+    </div>
+    <div v-else class="queue-list">
+      <div
+        v-for="(song, idx) in queue"
+        :key="song.title + song.artist"
+        class="queue-row"
+        :class="{ current: isNow(song) }"
+        @click="skipTo(song)"
+        :title="`跳转: ${song.title}`"
+      >
+        <span class="idx">{{ String(idx + 1).padStart(2, '0') }}</span>
+        <span class="song-name">{{ song.title }}</span>
+        <span class="song-artist">{{ song.artist }}</span>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue';
 const props = defineProps({ queue: Array, now: Object });
 
-const upcoming = computed(() => {
-  if (!props.queue) return [];
-  if (!props.now) return props.queue;
-  const idx = props.queue.findIndex(s => s.title === props.now.title);
-  return idx >= 0 ? props.queue.slice(idx + 1) : props.queue;
-});
+function isNow(song) {
+  return props.now && props.now.title === song.title;
+}
+
+function skipTo(song) {
+  fetch('/api/skip-to', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: song.title, artist: song.artist }),
+  });
+}
 </script>
 
 <style scoped>
-.queue-preview { padding: 12px; background: #111; border-radius: 8px; margin: 16px 0; }
-.next { font-size: 14px; color: #ccc; }
-.rest { color: #666; font-size: 12px; margin-top: 4px; }
-.empty { color: #555; }
+.queue-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.card-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  letter-spacing: 1px;
+}
+.empty {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 8px 0;
+}
+.queue-list { display: flex; flex-direction: column; gap: 2px; }
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.1s;
+  border-left: 3px solid transparent;
+}
+.queue-row:hover { background: rgba(63, 186, 115, 0.05); }
+.queue-row.current {
+  background: rgba(42, 122, 77, 0.2);
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+.idx {
+  font-size: 10px;
+  min-width: 22px;
+  opacity: 0.6;
+}
+.song-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.song-artist {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-left: auto;
+  text-align: right;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+.queue-row.current .song-artist { color: var(--accent); }
 </style>
