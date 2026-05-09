@@ -1,0 +1,10 @@
+node_modules/
+data/state.db
+data/state.db-journal
+data/llm-calls.jsonl
+data/netease-cookie.txt
+data/netease-snapshot.json
+pwa/dist/
+.env
+.DS_Store
+Thumbs.db

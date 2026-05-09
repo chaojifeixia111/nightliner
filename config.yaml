@@ -1,0 +1,41 @@
+# Nightliner v0.4 Windows MVP config
+
+models:
+  light_command: null
+  radio_mode: claude-sonnet-4-6
+  chat_mode: claude-opus-4-7
+  consolidation: claude-opus-4-7
+  cold_start: claude-opus-4-7
+
+take_song:
+  library_prefer_pct: 70
+  recommend_channel_pct: 20
+  wildcard_pct: 10
+  archeology_mode_must_be_library_bound: true
+
+queue:
+  default_length: 10
+  min_length: 5
+  max_length: 30
+  segment_size: 5
+
+playback:
+  primary_source: netease
+  fallback_to_netease: false
+
+ncm:
+  api_base: http://localhost:3000
+  song_url_level: standard
+
+consolidation:
+  enabled: false
+
+signal_thresholds:
+  strong_skip_sec: 30
+  weak_skip_pct: 0.5
+  near_complete_pct: 0.9
+  cooldown_after_too_familiar_days: 90
+
+server:
+  port: 8080
+  host: 127.0.0.1
