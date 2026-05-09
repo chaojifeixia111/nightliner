@@ -281,5 +281,5 @@ app.post('/api/previous', (req, res) => {
 });
 
 server.listen(PORT, config.server.host, () => {
-  console.log(`Nightliner server on http://${config.server.host}:${PORT}`);
+  console.log(`NightlinerFM server on http://${config.server.host}:${PORT}`);
 });
