@@ -8,7 +8,8 @@
     "start": "node server/index.js",
     "ncm:login": "node scripts/ncm-login-qr.js",
     "ncm:fetch": "node scripts/ncm-fetch-playlists.js",
-    "cold-start": "node scripts/cold-start.js"
+    "cold-start": "node scripts/cold-start.js",
+    "chat": "node scripts/chat-once.js"
   },
   "dependencies": {
     "express": "^4.19.2",
