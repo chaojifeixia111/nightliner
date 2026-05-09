@@ -22,26 +22,33 @@ function normalizeSong(s) {
   return { id: s.id, name: s.name, artistName, picUrl, duration };
 }
 
-// 从 NCM 搜索结果里挑最匹配的(歌名 + 艺人)
+// 从 NCM 搜索结果里挑最匹配的(歌名 + 艺人都要对)
+// 重要:不做"只匹配歌名"的兜底,否则下架歌会被翻唱版替代(如周杰伦无版权 → 抓到他人翻唱)
 function pickBest(searchResult, targetTitle, targetArtist) {
-  // cloudsearch returns result.songs; legacy search also returns result.songs
   const songs = searchResult?.result?.songs || [];
   if (!songs.length) return null;
   const norm = s => (s || '').toLowerCase().replace(/\s|·|・|・|\(|\)|（|）/g, '');
   const tt = norm(targetTitle);
-  const ta = norm(targetArtist);
+  const targetArtistFirst = norm(targetArtist).split('/')[0];
+
+  // 1. 严格:歌名 + 艺人都对得上
   for (const s of songs) {
-    const normalized = normalizeSong(s);
-    const sName = norm(normalized.name);
-    const sArtist = norm(normalized.artistName);
-    if (sName === tt && sArtist.includes(norm(ta.split('/')[0]))) return s;
+    const n = normalizeSong(s);
+    if (norm(n.name) === tt && norm(n.artistName).includes(targetArtistFirst)) {
+      return s;
+    }
   }
-  // 兜底:第一个名字命中的
+
+  // 2. 宽松:歌名包含目标(处理 remix/feat 等后缀变体) + 艺人对得上
   for (const s of songs) {
-    if (norm(s.name) === tt) return s;
+    const n = normalizeSong(s);
+    if (norm(n.name).includes(tt) && norm(n.artistName).includes(targetArtistFirst)) {
+      return s;
+    }
   }
-  // 再兜底:第一条
-  return songs[0];
+
+  // 没找到原唱 → 不要推翻唱
+  return null;
 }
 
 // 给一个 play[],返回 [{ title, artist, ncm_id, url, duration_ms, found: true|false }, ...]
