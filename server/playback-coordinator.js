@@ -64,6 +64,7 @@ export async function resolvePlayList(plays) {
         duration_ms: best.duration,
         ncm_name: best.name,
         ncm_artist: best.artists.map(a => a.name).join(' / '),
+        pic_url: best.album?.picUrl || best.al?.picUrl || null,
         found: true,
       });
     } catch (e) {
