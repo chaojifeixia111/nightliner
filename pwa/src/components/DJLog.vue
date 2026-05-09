@@ -1,6 +1,6 @@
 <template>
   <div class="dj-log">
-    <div class="log-body" ref="logBody">
+    <div class="log-body" ref="logBody" @scroll="onScroll">
       <div v-if="messages.length === 0 && !thinking" class="empty">
         (waiting for DJ...)
       </div>
@@ -17,10 +17,10 @@
         </div>
         <div class="msg-body" :class="bodyClass(msg)">
           <template v-if="msg.kind === 'song'">
-            <span class="song-prefix">▸ {{ msg.title }}: </span>{{ msg.text }}
+            <span class="song-prefix">▸ {{ msg.title }}: </span>{{ displayText(i, msg) }}
           </template>
           <template v-else-if="msg.kind === 'opening'">
-            <span class="cli-prompt">&gt; </span>{{ msg.text }}
+            <span class="cli-prompt">&gt; </span>{{ displayText(i, msg) }}
           </template>
           <template v-else-if="msg.kind === 'reaction'">
             <span class="reaction-text">reacted: {{ msg.text }}</span>
@@ -45,7 +45,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue';
+import { ref, watch, nextTick, onMounted } from 'vue';
 import ThinkingIndicator from './ThinkingIndicator.vue';
 
 const props = defineProps({
@@ -55,6 +55,76 @@ const props = defineProps({
 });
 
 const logBody = ref(null);
+
+// --- Smart scroll ---
+const userPinnedToBottom = ref(true);
+
+function onScroll() {
+  if (!logBody.value) return;
+  const { scrollHeight, scrollTop, clientHeight } = logBody.value;
+  userPinnedToBottom.value = (scrollHeight - scrollTop - clientHeight) < 60;
+}
+
+function maybeScrollToBottom() {
+  if (!userPinnedToBottom.value) return;
+  nextTick(() => {
+    if (logBody.value) logBody.value.scrollTop = logBody.value.scrollHeight;
+  });
+}
+
+// --- Typewriter ---
+const TYPE_SPEED_MS = 22;
+const typedTexts = ref(new Map()); // index → currently shown text
+const typingInProgress = ref(new Set());
+
+function typeMessage(idx, fullText) {
+  let i = 0;
+  typingInProgress.value.add(idx);
+  const tick = () => {
+    i++;
+    typedTexts.value.set(idx, fullText.slice(0, i));
+    typedTexts.value = new Map(typedTexts.value); // force reactivity
+    maybeScrollToBottom();
+    if (i < fullText.length) setTimeout(tick, TYPE_SPEED_MS);
+    else typingInProgress.value.delete(idx);
+  };
+  tick();
+}
+
+function displayText(idx, msg) {
+  if (typedTexts.value.has(idx)) return typedTexts.value.get(idx);
+  return msg.text; // older / non-animated messages show immediately
+}
+
+// When new messages arrive, animate newly added ones (opening + song only)
+watch(() => props.messages.length, (newLen, oldLen) => {
+  const start = oldLen ?? 0;
+  for (let i = start; i < newLen; i++) {
+    const msg = props.messages[i];
+    if (msg && (msg.kind === 'opening' || msg.kind === 'song') && msg.text) {
+      typeMessage(i, msg.text);
+    }
+  }
+  // Also scroll for non-animated new messages
+  maybeScrollToBottom();
+});
+
+// Scroll when thinking indicator changes
+watch(() => props.thinking, () => {
+  maybeScrollToBottom();
+});
+
+// Update latestTs
+const latestTs = ref('');
+watch(() => props.messages, (msgs) => {
+  if (msgs.length) latestTs.value = fmtTs(msgs[msgs.length - 1]?.ts);
+}, { deep: true });
+
+// On mount, treat all existing messages as already done (no animation for history)
+onMounted(() => {
+  // existing messages already have full text via msg.text fallback in displayText()
+  maybeScrollToBottom();
+});
 
 function fmtTs(ts) {
   if (!ts) return '';
@@ -84,29 +154,21 @@ function bodyClass(msg) {
   if (msg.kind === 'song') return 'song-body';
   return '';
 }
-
-const latestTs = ref('');
-watch(() => props.messages, (msgs) => {
-  if (msgs.length) latestTs.value = fmtTs(msgs[msgs.length - 1]?.ts);
-  nextTick(() => {
-    if (logBody.value) logBody.value.scrollTop = logBody.value.scrollHeight;
-  });
-}, { deep: true });
-
-watch(() => props.thinking, () => {
-  nextTick(() => {
-    if (logBody.value) logBody.value.scrollTop = logBody.value.scrollHeight;
-  });
-});
 </script>
 
 <style scoped>
 .dj-log {
   /* Borderless, transparent panel */
   padding: 0 4px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 .log-body {
-  max-height: 280px;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
   overflow-y: auto;
   display: flex;
   flex-direction: column;

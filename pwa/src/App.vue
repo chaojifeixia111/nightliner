@@ -8,7 +8,9 @@
       @previous="onPrevious"
       @user-message="pushDjMessage"
     />
-    <DJLog :messages="djMessages" :thinking="thinking" :stats="lastStats" />
+    <div class="djlog-wrap">
+      <DJLog :messages="djMessages" :thinking="thinking" :stats="lastStats" />
+    </div>
     <ChatInput @send="onChat" />
     <StatusBar :connected="connected" />
     <TuningDrawer
@@ -120,5 +122,12 @@ function onApplyTuning(newTuning) {
   gap: 8px;
   padding-top: 8px;
   min-height: calc(100vh - 28px);
+}
+
+.djlog-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 </style>
