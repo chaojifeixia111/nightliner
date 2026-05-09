@@ -30,9 +30,60 @@ const broadcast = (msg) => {
 let currentQueue = [];
 let now = null;
 
+// In-memory tuning state
+let tuning = {
+  exploration_pct: 30,
+  queue_length: 5,
+  chattiness: 'medium',
+};
+
+// Netease snapshot cache for hit-rate stats
+let _snapshotNorm = null;
+async function getSnapshotNorm() {
+  if (_snapshotNorm) return _snapshotNorm;
+  try {
+    const raw = JSON.parse(await fs.readFile('data/netease-snapshot.json', 'utf8'));
+    const norm = s => (s || '').toLowerCase().replace(/[\s·・\(\)（）,，。.!！?？]/g, '');
+    const entries = [];
+    for (const pl of Object.values(raw.playlists)) {
+      for (const song of pl.songs) {
+        entries.push({
+          normName: norm(song.name),
+          normArtist: norm(song.artists),
+        });
+      }
+    }
+    _snapshotNorm = { entries, norm };
+  } catch {
+    _snapshotNorm = { entries: [], norm: s => s };
+  }
+  return _snapshotNorm;
+}
+
+function matchesLibrary(title, artist, snapshotNorm) {
+  const { entries, norm } = snapshotNorm;
+  const t = norm(title);
+  const a = norm(artist).split('/')[0].trim();
+  return entries.some(e => e.normName === t && e.normArtist.includes(a));
+}
+
 wss.on('connection', (ws) => {
   ws.send(JSON.stringify({ type: 'now', data: now }));
   ws.send(JSON.stringify({ type: 'queue', data: currentQueue }));
+  ws.send(JSON.stringify({ type: 'tuning', data: tuning }));
+});
+
+// GET /api/tuning
+app.get('/api/tuning', (req, res) => res.json(tuning));
+
+// POST /api/tuning
+app.post('/api/tuning', (req, res) => {
+  const { exploration_pct, queue_length, chattiness } = req.body;
+  if (exploration_pct !== undefined) tuning.exploration_pct = Number(exploration_pct);
+  if (queue_length !== undefined) tuning.queue_length = Number(queue_length);
+  if (chattiness !== undefined) tuning.chattiness = chattiness;
+  broadcast({ type: 'tuning', data: tuning });
+  res.json({ ok: true, tuning });
 });
 
 // POST /api/chat
@@ -41,10 +92,15 @@ app.post('/api/chat', async (req, res) => {
   if (!message) return res.status(400).json({ error: 'message required' });
 
   res.json({ ok: true, status: 'thinking' });
-  broadcast({ type: 'subtitle', data: 'DJ 思考中...' });
+  broadcast({ type: 'thinking', data: true });
 
   try {
-    const prompt = await buildChatPrompt({ userMessage: message, currentQueue, n: 5 });
+    const prompt = await buildChatPrompt({
+      userMessage: message,
+      currentQueue,
+      n: tuning.queue_length,
+      exploration_pct: tuning.exploration_pct,
+    });
     const raw = await callClaude({ prompt, model: config.models.chat_mode, trigger: 'chat' });
     const parsed = extractJson(raw);
 
@@ -52,7 +108,6 @@ app.post('/api/chat', async (req, res) => {
     const playable = resolved.filter(s => s.found);
 
     if (parsed.queueAction === 'rewrite_tail' && currentQueue.length) {
-      // 保留当前已播,替换后段
       const idxNow = now ? currentQueue.findIndex(s => s.title === now.title) : -1;
       const head = idxNow >= 0 ? currentQueue.slice(0, idxNow + 1) : [];
       currentQueue = [...head, ...playable];
@@ -60,7 +115,6 @@ app.post('/api/chat', async (req, res) => {
       const idxNow = now ? currentQueue.findIndex(s => s.title === now.title) : -1;
       currentQueue.splice(idxNow + 1, 0, ...playable);
     } else {
-      // null / 'replace_all' → 直接整批替换(M7-mini 简化:不区分 replace_all 和默认)
       currentQueue = playable;
       now = playable[0] || null;
     }
@@ -68,10 +122,47 @@ app.post('/api/chat', async (req, res) => {
     recordQueue({ mode: 'chat', songs: currentQueue });
     broadcast({ type: 'queue', data: currentQueue });
     broadcast({ type: 'now', data: now });
-    broadcast({ type: 'subtitle', data: parsed.say + (parsed.play[0]?.reason ? '\n' + parsed.play[0].reason : '') });
+    broadcast({ type: 'thinking', data: false });
+
+    // Broadcast DJ messages (opening + per-song reasons)
+    const ts = new Date().toISOString();
+    broadcast({ type: 'dj_message', data: { ts, kind: 'opening', text: parsed.say } });
+    for (let i = 0; i < playable.length; i++) {
+      const s = playable[i];
+      const reason = parsed.play?.[i]?.reason || '';
+      if (reason) {
+        broadcast({ type: 'dj_message', data: { ts, kind: 'song', title: s.title, text: reason } });
+      }
+    }
+
+    // Compute and broadcast stats
+    const snapshotNorm = await getSnapshotNorm();
+    let library_hits = 0;
+    let recommend = 0;
+    let wildcard = 0;
+    for (let i = 0; i < parsed.play?.length; i++) {
+      const sp = parsed.play[i]?.source_pool || '';
+      if (sp === 'library') library_hits++;
+      else if (sp === 'recommend') recommend++;
+      else wildcard++;
+    }
+    const vip_skipped = resolved.filter(s => !s.found && s.ncm_id).length;
+    const not_found = resolved.filter(s => !s.found && !s.ncm_id).length;
+    broadcast({
+      type: 'stats',
+      data: {
+        library_hits,
+        recommend,
+        wildcard,
+        vip_skipped,
+        not_found,
+        total: parsed.play?.length || 0,
+      },
+    });
   } catch (e) {
     console.error('chat error:', e);
-    broadcast({ type: 'subtitle', data: '出错了:' + e.message });
+    broadcast({ type: 'thinking', data: false });
+    broadcast({ type: 'dj_message', data: { ts: new Date().toISOString(), kind: 'opening', text: '出错了:' + e.message } });
   }
 });
 
@@ -87,10 +178,9 @@ app.post('/api/feedback', (req, res) => {
   if (!title || !artist || !signal) return res.status(400).json({ error: 'fields missing' });
   recordFeedback({ song_title: title, song_artist: artist, signal });
   res.json({ ok: true });
-  // 反馈影响下一段 queue 在下一次 chat 时通过 prompt 注入生效
 });
 
-// POST /api/play-event(由 PWA 在 audio 事件时上报)
+// POST /api/play-event
 app.post('/api/play-event', (req, res) => {
   const e = req.body;
   recordPlay({
@@ -100,7 +190,6 @@ app.post('/api/play-event', (req, res) => {
     played_sec: e.played_sec,
     ended_reason: e.ended_reason,
   });
-  // 切到下一首
   if (e.ended_reason === 'natural' || e.ended_reason === 'user_skip') {
     const idx = currentQueue.findIndex(s => s.title === e.title);
     if (idx >= 0 && idx + 1 < currentQueue.length) {
@@ -109,10 +198,59 @@ app.post('/api/play-event', (req, res) => {
     } else {
       now = null;
       broadcast({ type: 'now', data: null });
-      broadcast({ type: 'subtitle', data: 'queue 结束。再来一段?' });
+      broadcast({ type: 'dj_message', data: { ts: new Date().toISOString(), kind: 'opening', text: 'queue 结束。再来一段?' } });
     }
   }
   res.json({ ok: true });
+});
+
+// POST /api/skip — explicit skip with play-event recording
+app.post('/api/skip', (req, res) => {
+  const { title, artist, played_sec } = req.body;
+  if (!title || !artist) return res.status(400).json({ error: 'title and artist required' });
+
+  recordPlay({
+    title,
+    artist,
+    duration_sec: 0,
+    played_sec: played_sec || 0,
+    ended_reason: 'user_skip',
+  });
+
+  const idx = currentQueue.findIndex(s => s.title === title);
+  if (idx >= 0 && idx + 1 < currentQueue.length) {
+    now = currentQueue[idx + 1];
+    broadcast({ type: 'now', data: now });
+  } else {
+    now = null;
+    broadcast({ type: 'now', data: null });
+  }
+
+  res.json({ ok: true, now });
+});
+
+// POST /api/skip-to — jump to a specific song in queue
+app.post('/api/skip-to', (req, res) => {
+  const { title, artist } = req.body;
+  if (!title || !artist) return res.status(400).json({ error: 'title and artist required' });
+
+  const idx = currentQueue.findIndex(s => s.title === title && s.artist === artist);
+  if (idx < 0) return res.status(404).json({ error: 'song not in queue' });
+
+  // Record skip of current song if any
+  if (now && now.title !== title) {
+    recordPlay({
+      title: now.title,
+      artist: now.artist,
+      duration_sec: 0,
+      played_sec: 0,
+      ended_reason: 'user_skip',
+    });
+  }
+
+  now = currentQueue[idx];
+  broadcast({ type: 'now', data: now });
+  res.json({ ok: true, now });
 });
 
 server.listen(PORT, config.server.host, () => {

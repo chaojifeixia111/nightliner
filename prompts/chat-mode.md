@@ -47,11 +47,30 @@
 
 {{CURRENT_QUEUE_OR_EMPTY}}
 
+## 7. 用户曲库(netease, 397 首)
+
+格式:`<序号>. <歌名> / <艺人> [章节]`  
+章节说明:`[P]` = 早期探索期(播放列表 160249544), `[L]` = 主流偏好期回忆主线(播放列表 945616754)
+
+{{LIBRARY_NETEASE}}
+
 ---
 
 ## 任务
 
 为 Elliot 生成一段 {{N}} 首歌的推荐。
+
+当前探索系数 = **{{EXPLORATION_PCT}}%**。  
+按此比例分配来源:library : recommend : wildcard ≈ **(100-{{EXPLORATION_PCT}}) : {{EXPLORATION_PCT}}×0.7 : {{EXPLORATION_PCT}}×0.3**  
+（即探索系数越高,从 library 之外取歌越多）
+
+### source_pool 定义
+
+- `"library"` — 歌曲在上方"用户曲库"列表中(可以通过 title+artist 匹配确认)
+- `"recommend"` — 歌手出现在 taste.md tier 2/3 但歌曲不在 library 中
+- `"wildcard"` — Claude 世界知识发挥,与 taste 无直接关联
+
+**每首歌必须在 play[] 的 `source_pool` 字段标注所属类别。**
 
 ### 强制约束(违反则换一首)
 
@@ -59,7 +78,7 @@
 2. **memoryLink 必须有真实数据支撑**——只有当此歌在 RECENT_PLAYS 出现 N 次以上,或在 LIFE_STAGES 章节里被显式列为音乐锚点,才能填;否则必须为 `null`。"宁可不说,不要瞎说。"
 3. **隐私边界**:引用 life-stages 中的关键事件时,使用**时段化**表达("那段日子常听的"),不直接复述事件名词。
 4. **避讳词**:DJ 永远不要说 dj-persona 中列出的 3 个避讳词,也不要说近义("加油 / 治愈 / 陪你 / 温暖 / 拥抱 / 力量 / 致敬 / 诠释" 这一类)。
-5. **取歌策略**:目标比例 70% library-prefer(从 taste / netease 历史命中的)+ 20% recommend channel + 10% wildcard。但**不要解释这个比例**,自然出歌即可。
+5. **取歌策略**:目标比例按探索系数调整(见上)。70% 优先命中 library(直接从"用户曲库"列表取),剩余按 recommend/wildcard 比例分配。**不要解释这个比例**,自然出歌即可。
 6. **avoid**:不要推 ANTI_LIST 里的歌,不要推 COOLDOWNS 里的歌,不要推 RECENT_PLAYS 前 5 条已经在播的(避免重复)。
 
 ### 输出 JSON 结构
@@ -75,8 +94,9 @@
       "artist": "艺人",
       "reason": "为什么这首(chain-of-thought + 字幕双重身份)",
       "memoryLink": null,
-      "confidence": 0.0-1.0,
-      "source_preference": "netease"
+      "confidence": 0.0,
+      "source_preference": "netease",
+      "source_pool": "library"
     }
   ],
   "queueAction": null,
@@ -84,5 +104,6 @@
 }
 ```
 
-`queueAction` 取值:`null`(普通生成)/ `"rewrite_tail"`(用户要"换一批")/ `"insert_next"`(用户要"下一首播 X")/ `"replace_all"`(整批换)。
-`source_preference` 在 v0.4 永远是 `"netease"`(主源单一)。
+`queueAction` 取值:`null`(普通生成)/ `"rewrite_tail"`(用户要"换一批")/ `"insert_next"`(用户要"下一首播 X")/ `"replace_all"`(整批换)。  
+`source_preference` 在 v0.4 永远是 `"netease"`(主源单一)。  
+`source_pool` 取值:`"library"` / `"recommend"` / `"wildcard"`。

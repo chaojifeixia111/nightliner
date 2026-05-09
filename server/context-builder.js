@@ -1,12 +1,56 @@
 // server/context-builder.js
-// 拼装 chat-mode prompt 的 6 个片段
+// 拼装 chat-mode prompt 的 7 个片段（含 netease 曲库）
 import fs from 'fs/promises';
 import db, { recentPlays, recentFeedback, antiList, activeCooldowns } from './state-db.js';
 
 const TEMPLATE_PATH = 'prompts/chat-mode.md';
+const SNAPSHOT_PATH = 'data/netease-snapshot.json';
+
+// Playlist ID → chapter tag
+const PLAYLIST_TAG = {
+  160249544: 'P',  // Prelude/Long Shot 早期
+  945616754: 'L',  // Long Shot/Drift 后期
+};
+
+// Cache the formatted library string (loaded once)
+let _libraryCache = null;
 
 async function readOrEmpty(p) {
   try { return await fs.readFile(p, 'utf8'); } catch { return ''; }
+}
+
+async function buildLibrarySlice() {
+  if (_libraryCache) return _libraryCache;
+
+  let snapshot;
+  try {
+    snapshot = JSON.parse(await fs.readFile(SNAPSHOT_PATH, 'utf8'));
+  } catch {
+    _libraryCache = '(netease-snapshot.json 未找到)';
+    return _libraryCache;
+  }
+
+  const pls = snapshot.playlists;
+  // Build deduped list: first playlist wins for tag assignment
+  const seen = new Map(); // id → { name, artists, tag }
+  for (const pl of Object.values(pls)) {
+    const tag = PLAYLIST_TAG[pl.id] || '?';
+    for (const song of pl.songs) {
+      if (!seen.has(song.id)) {
+        seen.set(song.id, { name: song.name, artists: song.artists, tag });
+      }
+    }
+  }
+
+  const lines = [];
+  let idx = 1;
+  for (const [, s] of seen) {
+    lines.push(`${idx}. ${s.name} / ${s.artists} [${s.tag}]`);
+    idx++;
+  }
+
+  _libraryCache = lines.join('\n');
+  return _libraryCache;
 }
 
 function fmtPlays(plays) {
@@ -31,12 +75,13 @@ function fmtSongList(rows) {
   return rows.map(r => `- ${r.song_title} / ${r.song_artist}`).join('\n');
 }
 
-export async function buildChatPrompt({ userMessage, currentQueue, n = 5 }) {
+export async function buildChatPrompt({ userMessage, currentQueue, n = 5, exploration_pct = 30 }) {
   const template = await fs.readFile(TEMPLATE_PATH, 'utf8');
   const djPersona = await readOrEmpty('user/dj-persona.md');
   const taste = await readOrEmpty('user/taste.md');
   const moodRules = await readOrEmpty('user/mood-rules.md');
   const lifeStages = await readOrEmpty('user/life-stages.md');
+  const librarySlice = await buildLibrarySlice();
 
   const now = new Date();
   const dow = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][now.getDay()];
@@ -57,5 +102,7 @@ export async function buildChatPrompt({ userMessage, currentQueue, n = 5 }) {
       currentQueue && currentQueue.length
         ? currentQueue.map((s, i) => `${i + 1}. ${s.title} / ${s.artist}`).join('\n')
         : '(当前 queue 为空)')
-    .replace('{{N}}', String(n));
+    .replace('{{N}}', String(n))
+    .replace('{{EXPLORATION_PCT}}', String(exploration_pct))
+    .replace('{{LIBRARY_NETEASE}}', librarySlice);
 }
