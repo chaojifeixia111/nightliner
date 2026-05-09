@@ -1,6 +1,6 @@
 <template>
   <div v-if="show" class="thinking">
-    <span class="label">:CLAUDE</span>
+    <span class="label">:NIGHTLINERFM</span>
     <span class="dots">
       <span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>
     </span>
