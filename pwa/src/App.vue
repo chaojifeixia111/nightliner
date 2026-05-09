@@ -1,37 +1,101 @@
 <template>
-  <div class="player-shell">
-    <h1>Nightliner</h1>
-    <p v-if="!connected">连接中...</p>
-    <Player v-else :state="state" @feedback="onFeedback" @chat="onChat" />
+  <div class="app-shell">
+    <AppHeader @open-tuning="tuningOpen = true" />
+    <ClockCard />
+    <Player :state="state" @feedback="onFeedback" @skip="onSkip" />
+    <QueuePreview :queue="state.queue" :now="state.now" />
+    <DJLog :messages="djMessages" :thinking="thinking" :stats="lastStats" />
+    <ChatInput @send="onChat" />
+    <StatusBar :connected="connected" />
+    <TuningDrawer :open="tuningOpen" :tuning="state.tuning" @close="tuningOpen = false" @apply="onApplyTuning" />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, onMounted, onUnmounted } from 'vue';
+import AppHeader from './components/AppHeader.vue';
+import ClockCard from './components/ClockCard.vue';
 import Player from './components/Player.vue';
-import { connectWs, sendChat, sendFeedback } from './ws-client.js';
+import QueuePreview from './components/QueuePreview.vue';
+import DJLog from './components/DJLog.vue';
+import ChatInput from './components/ChatInput.vue';
+import StatusBar from './components/StatusBar.vue';
+import TuningDrawer from './components/TuningDrawer.vue';
+import { connectWs, sendFeedback } from './ws-client.js';
 
 const connected = ref(false);
-const state = ref({ now: null, queue: [], subtitle: '' });
+const tuningOpen = ref(false);
+const thinking = ref(false);
+const djMessages = ref([]);
+const lastStats = ref(null);
+
+const state = reactive({
+  now: null,
+  queue: [],
+  tuning: { exploration_pct: 30, queue_length: 5, chattiness: 'medium' },
+});
 
 let ws;
 
+const MSG_CAP = 30;
+
+function pushDjMessage(msg) {
+  djMessages.value.push(msg);
+  if (djMessages.value.length > MSG_CAP) {
+    djMessages.value.splice(0, djMessages.value.length - MSG_CAP);
+  }
+}
+
 onMounted(() => {
   ws = connectWs((msg) => {
-    if (msg.type === 'now') state.value.now = msg.data;
-    if (msg.type === 'queue') state.value.queue = msg.data;
-    if (msg.type === 'subtitle') state.value.subtitle = msg.data;
     if (msg.type === 'connected') connected.value = true;
+    if (msg.type === 'now') state.now = msg.data;
+    if (msg.type === 'queue') state.queue = msg.data;
+    if (msg.type === 'tuning') Object.assign(state.tuning, msg.data);
+    if (msg.type === 'thinking') thinking.value = msg.data;
+    if (msg.type === 'dj_message') pushDjMessage(msg.data);
+    if (msg.type === 'stats') lastStats.value = msg.data;
   });
+
+  // Fetch initial tuning
+  fetch('/api/tuning').then(r => r.json()).then(t => Object.assign(state.tuning, t)).catch(() => {});
 });
 
 onUnmounted(() => ws?.close());
 
 function onFeedback(signal) {
-  if (state.value.now) sendFeedback({ ...state.value.now, signal });
+  if (state.now) sendFeedback({ ...state.now, signal });
 }
 
 function onChat(text) {
-  sendChat(text);
+  fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: text }),
+  });
+}
+
+function onSkip() {
+  if (!state.now) return;
+  fetch('/api/skip', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: state.now.title, artist: state.now.artist }),
+  });
+}
+
+function onApplyTuning(newTuning) {
+  fetch('/api/tuning', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(newTuning),
+  });
+  tuningOpen.value = false;
 }
 </script>
+
+<style scoped>
+.app-shell {
+  padding-top: 8px;
+}
+</style>

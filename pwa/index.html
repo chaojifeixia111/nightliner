@@ -3,10 +3,39 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nightliner</title>
+  <title>Nightliner · 夜线电台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=VT323&family=JetBrains+Mono:wght@300;400;500&family=Press+Start+2P&display=swap" rel="stylesheet" />
   <style>
-    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #0a0a0a; color: #e8e8e8; }
-    #app { max-width: 720px; margin: 0 auto; padding: 16px; }
+    :root {
+      --accent: #3fba73;
+      --accent-dim: #2a7a4d;
+      --bg: #080808;
+      --panel: #0f0f0f;
+      --border: #1f2a22;
+      --text: #c8d4cc;
+      --text-dim: #5a6a60;
+      --warn: #c8a03a;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: 'JetBrains Mono', monospace;
+      background-color: var(--bg);
+      background-image: radial-gradient(circle, #1a1a1a 1px, transparent 1px);
+      background-size: 24px 24px;
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    #app {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 16px 80px;
+    }
   </style>
 </head>
 <body>
