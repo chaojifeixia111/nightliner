@@ -1,25 +1,29 @@
 <template>
-  <div class="dj-log-card">
-    <div class="card-label">┌─ DJ LOG ─┐</div>
-
+  <div class="dj-log">
     <div class="log-body" ref="logBody">
       <div v-if="messages.length === 0 && !thinking" class="empty">
-        ( 等 DJ 发话 )
+        (waiting for DJ...)
       </div>
 
       <div
         v-for="(msg, i) in messages"
         :key="i"
         class="log-msg"
-        :class="msg.kind"
+        :class="[msg.kind, msgSpeaker(msg)]"
       >
         <div class="msg-header">
-          <span class="speaker">:CLAUDE</span>
+          <span class="speaker" :class="speakerClass(msg)">{{ speakerLabel(msg) }}</span>
           <span class="ts">{{ fmtTs(msg.ts) }}</span>
         </div>
-        <div class="msg-body">
+        <div class="msg-body" :class="bodyClass(msg)">
           <template v-if="msg.kind === 'song'">
-            <span class="song-prefix">▸ {{ msg.title }}:  </span>{{ msg.text }}
+            <span class="song-prefix">▸ {{ msg.title }}: </span>{{ msg.text }}
+          </template>
+          <template v-else-if="msg.kind === 'opening'">
+            <span class="cli-prompt">&gt; </span>{{ msg.text }}
+          </template>
+          <template v-else-if="msg.kind === 'reaction'">
+            <span class="reaction-text">reacted: {{ msg.text }}</span>
           </template>
           <template v-else>{{ msg.text }}</template>
         </div>
@@ -52,14 +56,33 @@ const props = defineProps({
 
 const logBody = ref(null);
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
 function fmtTs(ts) {
   if (!ts) return '';
   try {
     const d = new Date(ts);
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   } catch { return ''; }
+}
+
+function speakerLabel(msg) {
+  if (msg.kind === 'reaction') return ':USER';
+  return ':CLAUDE';
+}
+
+function speakerClass(msg) {
+  if (msg.kind === 'reaction') return 'speaker-user';
+  return 'speaker-claude';
+}
+
+function msgSpeaker(msg) {
+  if (msg.kind === 'reaction') return 'user-msg';
+  return 'claude-msg';
+}
+
+function bodyClass(msg) {
+  if (msg.kind === 'reaction') return 'reaction-body';
+  if (msg.kind === 'song') return 'song-body';
+  return '';
 }
 
 const latestTs = ref('');
@@ -78,17 +101,9 @@ watch(() => props.thinking, () => {
 </script>
 
 <style scoped>
-.dj-log-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  padding: 16px;
-  margin-bottom: 12px;
-}
-.card-label {
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-bottom: 10px;
-  letter-spacing: 1px;
+.dj-log {
+  /* Borderless, transparent panel */
+  padding: 0 4px;
 }
 .log-body {
   max-height: 280px;
@@ -97,12 +112,21 @@ watch(() => props.thinking, () => {
   flex-direction: column;
   gap: 10px;
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--blue) transparent;
 }
-.log-body::-webkit-scrollbar { width: 4px; }
+.log-body::-webkit-scrollbar { width: 8px; }
 .log-body::-webkit-scrollbar-track { background: transparent; }
-.log-body::-webkit-scrollbar-thumb { background: var(--border); }
-.empty { font-size: 12px; color: var(--text-dim); padding: 4px 0; }
+.log-body::-webkit-scrollbar-thumb {
+  background: var(--blue-dim);
+  border-radius: 4px;
+}
+.log-body::-webkit-scrollbar-thumb:hover { background: var(--blue); }
+
+.empty {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 4px 0;
+}
 .log-msg { display: flex; flex-direction: column; gap: 3px; }
 .msg-header {
   display: flex;
@@ -111,20 +135,32 @@ watch(() => props.thinking, () => {
 }
 .speaker {
   font-family: 'Press Start 2P', monospace;
-  font-size: 7px;
-  color: var(--text-dim);
+  font-size: 8px;
   letter-spacing: 1px;
 }
-.system-label { color: var(--warn, #c8a03a); }
-.ts { font-size: 10px; color: var(--text-dim); opacity: 0.6; }
+.speaker-claude { color: var(--text-dim); }
+.speaker-user { color: var(--blue); }
+.system-label { color: var(--warn); }
+.ts {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+  opacity: 0.6;
+}
 .msg-body {
-  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
   color: var(--text);
   line-height: 1.5;
   white-space: pre-line;
 }
-.log-msg.song .msg-body { color: var(--text-dim); }
+.song-body { color: var(--text-dim); }
+.reaction-body {
+  font-size: 12px;
+  color: var(--blue);
+  opacity: 0.85;
+}
+.cli-prompt { color: var(--text-dim); }
 .song-prefix { color: var(--accent); }
-.log-msg.system .msg-body { color: var(--warn, #c8a03a); }
-.warn-text { color: var(--warn, #c8a03a); }
+.warn-text { color: var(--warn); }
 </style>

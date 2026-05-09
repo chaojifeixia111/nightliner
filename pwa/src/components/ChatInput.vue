@@ -1,62 +1,91 @@
 <template>
-  <form class="chat" @submit.prevent="onSubmit">
+  <form class="chat-pill" :class="{ focused }" @submit.prevent="onSubmit">
     <input
+      ref="inputEl"
       v-model="text"
-      placeholder="跟 DJ 说话…"
+      :placeholder="placeholder"
       autocomplete="off"
+      @focus="focused = true"
+      @blur="focused = false"
     />
-    <button type="submit" :disabled="!text.trim()">发送</button>
+    <button type="submit" class="send-btn" :disabled="!text.trim()">↗</button>
   </form>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+import { pickGreeting } from '../utils/greetings.js';
+
 const text = ref('');
+const focused = ref(false);
+const placeholder = ref('');
+const inputEl = ref(null);
 const emit = defineEmits(['send']);
+
+onMounted(() => {
+  placeholder.value = pickGreeting();
+});
 
 function onSubmit() {
   const msg = text.value.trim();
   if (!msg) return;
   emit('send', msg);
   text.value = '';
+  // Refresh greeting on clear
+  placeholder.value = pickGreeting();
 }
 </script>
 
 <style scoped>
-.chat {
+.chat-pill {
   display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+  align-items: center;
+  height: 48px;
+  border-radius: 24px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  padding: 4px 4px 4px 16px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  flex-shrink: 0;
+}
+.chat-pill.focused {
+  border-color: var(--blue);
+  box-shadow: 0 0 12px var(--blue-glow);
 }
 input {
   flex: 1;
-  padding: 10px 12px;
-  background: var(--panel);
-  border: 1px solid var(--border);
+  border: none;
+  background: transparent;
   color: var(--text);
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
   outline: none;
-  transition: border-color 0.15s;
+  padding: 0;
+  min-width: 0;
 }
-input:focus { border-color: var(--accent-dim); }
 input::placeholder { color: var(--text-dim); }
-button {
-  padding: 10px 20px;
-  background: var(--accent-dim);
-  border: 1px solid var(--accent-dim);
+
+.send-btn {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
   color: var(--bg);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  letter-spacing: 1px;
+  font-size: 16px;
   cursor: pointer;
-  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s;
+  font-family: 'JetBrains Mono', monospace;
 }
-button:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); }
-button:disabled {
-  background: var(--panel);
-  border-color: var(--border);
-  color: var(--text-dim);
+.send-btn:disabled {
+  opacity: 0.3;
   cursor: not-allowed;
+}
+.send-btn:hover:not(:disabled) {
+  opacity: 0.85;
 }
 </style>
