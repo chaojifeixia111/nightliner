@@ -47,6 +47,14 @@ export async function search(keywords, { limit = 5 } = {}) {
   return ncmRequest('/search', { keywords, limit, type: 1 });
 }
 
+export async function cloudsearch(keywords, { limit = 5 } = {}) {
+  return ncmRequest('/cloudsearch', { keywords, limit, type: 1 });
+}
+
+export async function songDetail(ids) {
+  return ncmRequest('/song/detail', { ids: ids.join(',') });
+}
+
 export async function songUrl(id, level = 'standard') {
   return ncmRequest('/song/url/v1', { id, level });
 }
