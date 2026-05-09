@@ -1,0 +1,64 @@
+// server/ncm-client.js
+// NeteaseCloudMusicApi 客户端封装(只封本月需要的端点)
+import fs from 'fs/promises';
+import path from 'path';
+
+const API_BASE = 'http://127.0.0.1:3000';
+const COOKIE_PATH = 'data/netease-cookie.txt';
+
+async function loadCookie() {
+  try {
+    return (await fs.readFile(COOKIE_PATH, 'utf8')).trim();
+  } catch {
+    return '';
+  }
+}
+
+async function ncmRequest(endpoint, params = {}) {
+  const cookie = await loadCookie();
+  const url = new URL(API_BASE + endpoint);
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null) url.searchParams.set(k, v);
+  }
+  if (cookie) url.searchParams.set('cookie', cookie);
+  const r = await fetch(url, { method: 'GET' });
+  if (!r.ok) throw new Error(`NCM ${endpoint} HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function loginQrKey() {
+  return ncmRequest('/login/qr/key', { timestamp: Date.now() });
+}
+
+export async function loginQrCreate(key) {
+  return ncmRequest('/login/qr/create', { key, qrimg: true, timestamp: Date.now() });
+}
+
+export async function loginQrCheck(key) {
+  return ncmRequest('/login/qr/check', { key, timestamp: Date.now() });
+}
+
+export async function saveCookie(cookieStr) {
+  await fs.mkdir(path.dirname(COOKIE_PATH), { recursive: true });
+  await fs.writeFile(COOKIE_PATH, cookieStr, 'utf8');
+}
+
+export async function search(keywords, { limit = 5 } = {}) {
+  return ncmRequest('/search', { keywords, limit, type: 1 });
+}
+
+export async function songUrl(id, level = 'standard') {
+  return ncmRequest('/song/url/v1', { id, level });
+}
+
+export async function playlistDetail(id) {
+  return ncmRequest('/playlist/detail', { id });
+}
+
+export async function playlistTrackAll(id, { limit = 1000, offset = 0 } = {}) {
+  return ncmRequest('/playlist/track/all', { id, limit, offset });
+}
+
+export async function userPlaylist(uid) {
+  return ncmRequest('/user/playlist', { uid });
+}
