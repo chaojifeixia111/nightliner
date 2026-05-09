@@ -1,7 +1,7 @@
 // scripts/chat-once.js
 // 命令行原型:接一句用户输入,跑一次完整 chat 流程,打印 {say, play, ...} JSON
 import { buildChatPrompt } from '../server/context-builder.js';
-import { callClaude, extractJson } from '../server/claude-adapter.js';
+import { callLlm, extractJson } from '../server/llm-adapter.js';
 import yaml from 'yaml';
 import fs from 'fs/promises';
 
@@ -25,8 +25,8 @@ async function main() {
   console.log(`(prompt 长度: ${prompt.length} 字符,模型: ${model})\n`);
 
   const t0 = Date.now();
-  const raw = await callClaude({ prompt, model, trigger: 'chat-once-cli' });
-  console.log(`(Claude 耗时: ${Date.now() - t0}ms)\n`);
+  const raw = await callLlm({ prompt, model, trigger: 'chat-once-cli' });
+  console.log(`(LLM 耗时: ${Date.now() - t0}ms)\n`);
 
   let parsed;
   try {

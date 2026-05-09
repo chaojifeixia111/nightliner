@@ -2,10 +2,13 @@
 
 models:
   light_command: null
-  radio_mode: claude-sonnet-4-6
-  chat_mode: claude-sonnet-4-6
-  consolidation: claude-opus-4-7
-  cold_start: claude-opus-4-7
+  radio_mode: deepseek-chat
+  chat_mode: deepseek-chat        # 日常对话:V3,快+便宜
+  consolidation: deepseek-reasoner # 周度收敛:R1,深度推理
+  cold_start: deepseek-reasoner    # 一次性冷启动:R1
+  # 备选(代理回归后可切回 Claude 做 A/B):
+  # chat_mode: claude-sonnet-4-6
+  # cold_start: claude-opus-4-7
 
 take_song:
   library_prefer_pct: 70

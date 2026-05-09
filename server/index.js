@@ -5,7 +5,7 @@ import http from 'http';
 import yaml from 'yaml';
 import fs from 'fs/promises';
 import { buildChatPrompt } from './context-builder.js';
-import { callClaude, extractJson } from './claude-adapter.js';
+import { callLlm, extractJson } from './llm-adapter.js';
 import { resolvePlayList } from './playback-coordinator.js';
 import { recordFeedback, recordPlay, recordQueue } from './state-db.js';
 
@@ -104,7 +104,7 @@ app.post('/api/chat', async (req, res) => {
       n: tuning.queue_length,
       exploration_pct: tuning.exploration_pct,
     });
-    const raw = await callClaude({ prompt, model: config.models.chat_mode, trigger: 'chat' });
+    const raw = await callLlm({ prompt, model: config.models.chat_mode, trigger: 'chat' });
     const parsed = extractJson(raw);
 
     const resolved = await resolvePlayList(parsed.play);

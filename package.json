@@ -5,11 +5,11 @@
   "type": "module",
   "engines": { "node": ">=20" },
   "scripts": {
-    "start": "node server/index.js",
+    "start": "node --env-file=.env server/index.js",
     "ncm:login": "node scripts/ncm-login-qr.js",
     "ncm:fetch": "node scripts/ncm-fetch-playlists.js",
-    "cold-start": "node scripts/cold-start.js",
-    "chat": "node scripts/chat-once.js"
+    "cold-start": "node --env-file=.env scripts/cold-start.js",
+    "chat": "node --env-file=.env scripts/chat-once.js"
   },
   "dependencies": {
     "express": "^4.19.2",
