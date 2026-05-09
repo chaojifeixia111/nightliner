@@ -35,7 +35,7 @@
           <span class="ts">{{ latestTs }}</span>
         </div>
         <div class="msg-body warn-text">
-          ⚠ {{ stats.vip_skipped }} 首仅 VIP 可播，{{ stats.not_found }} 首未找到 (共 {{ stats.total }} 首推荐)
+          ⚠ {{ stats.vip_skipped }} 首无版权/下架，{{ stats.not_found }} 首未搜到 (共 {{ stats.total }} 首推荐)
         </div>
       </div>
 
@@ -136,22 +136,26 @@ function fmtTs(ts) {
 
 function speakerLabel(msg) {
   if (msg.kind === 'reaction') return ':USER';
+  if (msg.kind === 'system') return ':SYSTEM';
   return ':CLAUDE';
 }
 
 function speakerClass(msg) {
   if (msg.kind === 'reaction') return 'speaker-user';
+  if (msg.kind === 'system') return 'system-label';
   return 'speaker-claude';
 }
 
 function msgSpeaker(msg) {
   if (msg.kind === 'reaction') return 'user-msg';
+  if (msg.kind === 'system') return 'system-msg';
   return 'claude-msg';
 }
 
 function bodyClass(msg) {
   if (msg.kind === 'reaction') return 'reaction-body';
   if (msg.kind === 'song') return 'song-body';
+  if (msg.kind === 'system') return 'warn-text';
   return '';
 }
 </script>

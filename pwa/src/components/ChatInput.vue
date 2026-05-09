@@ -20,7 +20,7 @@ const text = ref('');
 const focused = ref(false);
 const placeholder = ref('');
 const inputEl = ref(null);
-const emit = defineEmits(['send']);
+const emit = defineEmits(['send', 'command']);
 
 onMounted(() => {
   placeholder.value = pickGreeting();
@@ -29,9 +29,17 @@ onMounted(() => {
 function onSubmit() {
   const msg = text.value.trim();
   if (!msg) return;
-  emit('send', msg);
+
+  // Slash commands — handle locally, don't send to LLM
+  if (msg.startsWith('/')) {
+    const [cmd, ...args] = msg.slice(1).split(/\s+/);
+    emit('command', { cmd: cmd.toLowerCase(), args });
+  } else {
+    emit('send', msg);
+  }
+
   text.value = '';
-  // Refresh greeting on clear
+  // Refresh greeting on next focus
   placeholder.value = pickGreeting();
 }
 </script>

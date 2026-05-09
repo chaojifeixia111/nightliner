@@ -11,7 +11,7 @@
     <div class="djlog-wrap">
       <DJLog :messages="djMessages" :thinking="thinking" :stats="lastStats" />
     </div>
-    <ChatInput @send="onChat" />
+    <ChatInput @send="onChat" @command="onCommand" />
     <StatusBar :connected="connected" />
     <TuningDrawer
       :open="tuningOpen"
@@ -112,6 +112,36 @@ function onApplyTuning(newTuning) {
     body: JSON.stringify(newTuning),
   });
   tuningOpen.value = false;
+}
+
+// CLI 风格斜杠命令(本地处理,不发给 LLM)
+function onCommand({ cmd, args }) {
+  const ts = new Date().toISOString();
+  switch (cmd) {
+    case 'clear':
+    case 'cls':
+      djMessages.value = [];
+      lastStats.value = null;
+      break;
+    case 'help':
+    case '?':
+      pushDjMessage({
+        ts, kind: 'system',
+        text: '/clear  清空对话\n/help   显示命令\n/tuning 打开调音台\n/queue  打开队列',
+      });
+      break;
+    case 'tuning':
+      tuningOpen.value = true;
+      break;
+    case 'queue':
+      queueOpen.value = true;
+      break;
+    default:
+      pushDjMessage({
+        ts, kind: 'system',
+        text: `unknown command: /${cmd} (try /help)`,
+      });
+  }
 }
 </script>
 
