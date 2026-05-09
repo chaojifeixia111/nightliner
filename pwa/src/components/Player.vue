@@ -182,10 +182,12 @@ function reportPlayEvent(reason, playedSec) {
   font-size: 11px;
   font-variant: small-caps;
   color: var(--accent);
-  border: 1px solid var(--accent-dim);
+  border: 1px solid var(--blue);
+  background: var(--blue-glow);
   padding: 2px 8px;
   margin-bottom: 12px;
   letter-spacing: 0.5px;
+  box-shadow: 0 0 12px rgba(74, 127, 219, 0.15);
 }
 .progress-wrap {
   display: flex;
@@ -201,7 +203,7 @@ function reportPlayEvent(reason, playedSec) {
 .progress-track {
   flex: 1;
   height: 6px;
-  background: #1a1a1a;
+  background: #0a1024;
   border: 1px solid var(--border);
   position: relative;
   cursor: pointer;
@@ -209,7 +211,8 @@ function reportPlayEvent(reason, playedSec) {
 }
 .progress-fill {
   height: 100%;
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--blue) 0%, var(--accent) 100%);
+  box-shadow: 0 0 8px rgba(74, 127, 219, 0.5);
   pointer-events: none;
 }
 .progress-thumb {

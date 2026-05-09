@@ -67,11 +67,12 @@ function skipTo(song) {
   transition: background 0.1s;
   border-left: 3px solid transparent;
 }
-.queue-row:hover { background: rgba(63, 186, 115, 0.05); }
+.queue-row:hover { background: rgba(74, 127, 219, 0.08); }
 .queue-row.current {
-  background: rgba(42, 122, 77, 0.2);
+  background: var(--blue-glow);
   border-left-color: var(--accent);
   color: var(--accent);
+  box-shadow: inset 0 0 24px rgba(74, 127, 219, 0.08);
 }
 .idx {
   font-size: 10px;

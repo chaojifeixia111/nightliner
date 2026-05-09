@@ -33,10 +33,14 @@ onUnmounted(() => clearInterval(timer));
 
 <style scoped>
 .clock-card {
-  background: var(--panel);
+  background:
+    radial-gradient(ellipse 60% 80% at 30% 50%, var(--blue-glow), transparent 70%),
+    var(--panel);
   border: 1px solid var(--border);
   padding: 16px;
   margin-bottom: 12px;
+  position: relative;
+  overflow: hidden;
 }
 .card-label {
   font-size: 11px;
@@ -55,6 +59,7 @@ onUnmounted(() => clearInterval(timer));
   font-size: 96px;
   color: var(--accent);
   line-height: 1;
+  text-shadow: 0 0 24px rgba(74, 127, 219, 0.35);
 }
 .clock-date {
   font-size: 12px;
@@ -68,7 +73,9 @@ onUnmounted(() => clearInterval(timer));
   margin-left: auto;
 }
 .dot {
+  color: var(--blue);
   animation: pulse 1.4s ease-in-out infinite;
+  text-shadow: 0 0 6px var(--blue);
 }
 @keyframes pulse {
   0%, 100% { opacity: 1; }

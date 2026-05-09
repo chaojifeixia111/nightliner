@@ -136,7 +136,7 @@ function onApply() {
   appearance: none;
   width: 100%;
   height: 4px;
-  background: #1a1a1a;
+  background: #0a1024;
   border: 1px solid var(--border);
   outline: none;
   cursor: pointer;
@@ -174,7 +174,7 @@ function onApply() {
 .radio-btn.active {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgba(63, 186, 115, 0.1);
+  background: var(--blue-glow);
 }
 .radio-btn:hover:not(.active) {
   border-color: var(--accent-dim);
