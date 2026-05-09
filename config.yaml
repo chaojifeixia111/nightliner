@@ -2,13 +2,16 @@
 
 models:
   light_command: null
-  radio_mode: deepseek-chat
-  chat_mode: deepseek-chat        # 日常对话:V3,快+便宜
-  consolidation: deepseek-reasoner # 周度收敛:R1,深度推理
-  cold_start: deepseek-reasoner    # 一次性冷启动:R1
+  # 全部用 V4 非思考模式(取消 reasoner / 思考模式)
+  radio_mode: deepseek-v4-flash
+  chat_mode: deepseek-v4-flash      # 日常对话:V4 flash,快(~10s),便宜
+  consolidation: deepseek-v4-pro    # 周度收敛:V4 pro,更强但仍非思考
+  cold_start: deepseek-v4-pro       # 一次性冷启动:V4 pro
   # 备选(代理回归后可切回 Claude 做 A/B):
   # chat_mode: claude-sonnet-4-6
   # cold_start: claude-opus-4-7
+  # 思考模式备选(慢但深度强,1 次冷启动用一下也行):
+  # cold_start: deepseek-reasoner
 
 take_song:
   library_prefer_pct: 70

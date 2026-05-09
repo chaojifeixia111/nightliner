@@ -137,7 +137,7 @@ function fmtTs(ts) {
 function speakerLabel(msg) {
   if (msg.kind === 'reaction') return ':USER';
   if (msg.kind === 'system') return ':SYSTEM';
-  return ':CLAUDE';
+  return ':NIGHTLINERFM';
 }
 
 function speakerClass(msg) {
