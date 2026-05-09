@@ -1,15 +1,15 @@
 <template>
   <header class="app-header">
-    <div class="header-left">
-      <span class="logo">NIGHTLINER</span>
-      <span class="theme-badge">DARK</span>
+    <span class="logo">NIGHTLINER</span>
+    <div class="header-actions">
+      <button class="icon-btn" title="队列" @click="$emit('open-queue')">☰</button>
+      <button class="icon-btn" title="调音台" @click="$emit('open-tuning')">⚙</button>
     </div>
-    <button class="gear-btn" title="调音台" @click="$emit('open-tuning')">⚙</button>
   </header>
 </template>
 
 <script setup>
-defineEmits(['open-tuning']);
+defineEmits(['open-tuning', 'open-queue']);
 </script>
 
 <style scoped>
@@ -17,43 +17,36 @@ defineEmits(['open-tuning']);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 0 12px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 16px;
-}
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  height: 36px;
+  padding: 0 4px;
+  flex-shrink: 0;
 }
 .logo {
   font-family: 'Press Start 2P', monospace;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--accent);
-  letter-spacing: 2px;
+  letter-spacing: 4px;
 }
-.theme-badge {
-  font-size: 9px;
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-  padding: 2px 6px;
-  letter-spacing: 1px;
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.gear-btn {
-  background: none;
+.icon-btn {
+  background: var(--panel);
   border: 1px solid var(--border);
-  color: var(--text-dim);
-  font-size: 16px;
+  color: var(--accent);
+  font-size: 15px;
   width: 32px;
   height: 32px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-.gear-btn:hover {
-  color: var(--accent);
-  border-color: var(--accent-dim);
+.icon-btn:hover {
+  border-color: var(--blue);
+  box-shadow: 0 0 8px var(--blue-glow);
 }
 </style>
