@@ -30,6 +30,9 @@ const broadcast = (msg) => {
 let currentQueue = [];
 let now = null;
 
+// Play history stack for ⏮ previous track (max 30 entries)
+let playHistory = [];
+
 // In-memory tuning state
 let tuning = {
   exploration_pct: 30,
@@ -193,6 +196,10 @@ app.post('/api/play-event', (req, res) => {
   if (e.ended_reason === 'natural' || e.ended_reason === 'user_skip') {
     const idx = currentQueue.findIndex(s => s.title === e.title);
     if (idx >= 0 && idx + 1 < currentQueue.length) {
+      if (now) {
+        playHistory.push(now);
+        if (playHistory.length > 30) playHistory.shift();
+      }
       now = currentQueue[idx + 1];
       broadcast({ type: 'now', data: now });
     } else {
@@ -219,6 +226,10 @@ app.post('/api/skip', (req, res) => {
 
   const idx = currentQueue.findIndex(s => s.title === title);
   if (idx >= 0 && idx + 1 < currentQueue.length) {
+    if (now) {
+      playHistory.push(now);
+      if (playHistory.length > 30) playHistory.shift();
+    }
     now = currentQueue[idx + 1];
     broadcast({ type: 'now', data: now });
   } else {
@@ -237,7 +248,7 @@ app.post('/api/skip-to', (req, res) => {
   const idx = currentQueue.findIndex(s => s.title === title && s.artist === artist);
   if (idx < 0) return res.status(404).json({ error: 'song not in queue' });
 
-  // Record skip of current song if any
+  // Record skip of current song if any, and push to history
   if (now && now.title !== title) {
     recordPlay({
       title: now.title,
@@ -246,9 +257,21 @@ app.post('/api/skip-to', (req, res) => {
       played_sec: 0,
       ended_reason: 'user_skip',
     });
+    playHistory.push(now);
+    if (playHistory.length > 30) playHistory.shift();
   }
 
   now = currentQueue[idx];
+  broadcast({ type: 'now', data: now });
+  res.json({ ok: true, now });
+});
+
+// POST /api/previous — go back to last track in history
+app.post('/api/previous', (req, res) => {
+  if (playHistory.length === 0) {
+    return res.json({ ok: false, reason: 'no_history' });
+  }
+  now = playHistory.pop();
   broadcast({ type: 'now', data: now });
   res.json({ ok: true, now });
 });
