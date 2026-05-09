@@ -1,6 +1,6 @@
 <template>
   <header class="app-header">
-    <span class="logo">NIGHTLINER</span>
+    <span class="logo">NIGHTLINERFM</span>
     <div class="header-actions">
       <button class="icon-btn" title="队列" @click="$emit('open-queue')">☰</button>
       <button class="icon-btn" title="调音台" @click="$emit('open-tuning')">⚙</button>

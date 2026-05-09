@@ -1,6 +1,6 @@
 <template>
   <div class="status-bar">
-    <span class="fm-label">NIGHTLINER FM</span>
+    <span class="fm-label">NIGHTLINERFM</span>
     <span class="conn" :class="{ connected }">
       <span class="dot">{{ connected ? '●' : '○' }}</span>
       {{ connected ? 'CONNECTED' : 'DISCONNECTED' }}
