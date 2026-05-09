@@ -147,17 +147,20 @@ function onCommand({ cmd, args }) {
 
 <style scoped>
 .app-shell {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding-top: 8px;
-  min-height: calc(100vh - 28px);
+  padding-bottom: 36px;       /* 给底部固定的 StatusBar(28px)留位置,留 8px 缓冲 */
+  min-height: 0;              /* 允许 flex children 收缩,让 DJLog 内部滚 */
 }
 
 .djlog-wrap {
   flex: 1;
-  min-height: 0;
+  min-height: 0;              /* 关键:让 DJLog 在剩余空间内滚动,不撑爆父容器 */
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 </style>

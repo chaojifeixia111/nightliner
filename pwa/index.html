@@ -44,13 +44,17 @@
       background-size: auto, 24px 24px;
       background-repeat: no-repeat, repeat;
       color: var(--text);
-      min-height: 100vh;
+      height: 100vh;
+      overflow: hidden;        /* 页面不滚动,所有滚动发生在 DJLog 内部 */
     }
 
     #app {
       max-width: 720px;
       margin: 0 auto;
-      padding: 0 16px 80px;
+      padding: 0 16px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
 
     /* selection */

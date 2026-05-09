@@ -7,6 +7,7 @@
 
       <div
         v-for="(msg, i) in messages"
+        v-show="shouldRenderMessage(i, msg)"
         :key="i"
         class="log-msg"
         :class="[msg.kind, msgSpeaker(msg)]"
@@ -72,40 +73,60 @@ function maybeScrollToBottom() {
   });
 }
 
-// --- Typewriter ---
-const TYPE_SPEED_MS = 22;
-const typedTexts = ref(new Map()); // index → currently shown text
-const typingInProgress = ref(new Set());
+// --- Typewriter (串行队列:一条打完才下一条,像 ChatGPT 那样) ---
+const TYPE_SPEED_MS = 18;
+const typedTexts = ref(new Map()); // index → currently shown text(空字符串=排队中,未开始)
+const typeQueue = []; // FIFO of {idx, fullText} pending
+let typingActive = false;
 
-function typeMessage(idx, fullText) {
+function shouldRenderMessage(idx, msg) {
+  // reaction / system 消息不参与排队,立即显示
+  if (msg.kind === 'reaction' || msg.kind === 'system') return true;
+  // 已经接管(在 typedTexts 里)的消息:有内容才显示;空字符串=排队中,先隐藏
+  if (typedTexts.value.has(idx)) return typedTexts.value.get(idx).length > 0;
+  // 历史消息(挂载前就在的)直接显示
+  return true;
+}
+
+function enqueueTyping(idx, fullText) {
+  typedTexts.value.set(idx, ''); // 占位:渲染时被 shouldRenderMessage 隐藏
+  typeQueue.push({ idx, fullText });
+  if (!typingActive) startNextTyping();
+}
+
+function startNextTyping() {
+  const item = typeQueue.shift();
+  if (!item) {
+    typingActive = false;
+    return;
+  }
+  typingActive = true;
   let i = 0;
-  typingInProgress.value.add(idx);
   const tick = () => {
     i++;
-    typedTexts.value.set(idx, fullText.slice(0, i));
-    typedTexts.value = new Map(typedTexts.value); // force reactivity
+    typedTexts.value.set(item.idx, item.fullText.slice(0, i));
+    typedTexts.value = new Map(typedTexts.value); // 强制响应式
     maybeScrollToBottom();
-    if (i < fullText.length) setTimeout(tick, TYPE_SPEED_MS);
-    else typingInProgress.value.delete(idx);
+    if (i < item.fullText.length) setTimeout(tick, TYPE_SPEED_MS);
+    else startNextTyping();
   };
   tick();
 }
 
 function displayText(idx, msg) {
   if (typedTexts.value.has(idx)) return typedTexts.value.get(idx);
-  return msg.text; // older / non-animated messages show immediately
+  return msg.text; // 历史消息直接全显示
 }
 
-// When new messages arrive, animate newly added ones (opening + song only)
+// 新消息进来:加入队列,等前一条打完
 watch(() => props.messages.length, (newLen, oldLen) => {
   const start = oldLen ?? 0;
   for (let i = start; i < newLen; i++) {
     const msg = props.messages[i];
     if (msg && (msg.kind === 'opening' || msg.kind === 'song') && msg.text) {
-      typeMessage(i, msg.text);
+      enqueueTyping(i, msg.text);
     }
   }
-  // Also scroll for non-animated new messages
   maybeScrollToBottom();
 });
 
