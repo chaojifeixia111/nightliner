@@ -73,3 +73,11 @@ export async function playlistTrackAll(id, { limit = 1000, offset = 0 } = {}) {
 export async function userPlaylist(uid) {
   return ncmRequest('/user/playlist', { uid });
 }
+
+export async function recommendSongs(limit = 20) {
+  return ncmRequest('/recommend/songs', { limit });
+}
+
+export async function personalFm() {
+  return ncmRequest('/personal_fm');
+}
