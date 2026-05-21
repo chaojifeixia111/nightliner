@@ -59,8 +59,22 @@ function migrate(db) {
       songs_json TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS chat_turns (
+      id INTEGER PRIMARY KEY,
+      ts INTEGER NOT NULL,
+      user_message TEXT NOT NULL,
+      intent TEXT,
+      dj_say TEXT,
+      play_titles_json TEXT,
+      queue_action TEXT,
+      feedback_extract_json TEXT,
+      context_now_title TEXT,
+      context_now_artist TEXT
+    );
+
     CREATE INDEX IF NOT EXISTS idx_play_events_ts ON play_events(ts);
     CREATE INDEX IF NOT EXISTS idx_feedback_ts ON feedback(ts);
+    CREATE INDEX IF NOT EXISTS idx_chat_turns_ts ON chat_turns(ts);
   `);
 }
 
@@ -145,6 +159,37 @@ export function recordQueue(queue) {
     queue.mode || 'chat',
     JSON.stringify(queue.songs)
   ).lastInsertRowid;
+}
+
+export function recordChatTurn(turn) {
+  db.prepare(`
+    INSERT INTO chat_turns
+    (ts, user_message, intent, dj_say, play_titles_json, queue_action, feedback_extract_json, context_now_title, context_now_artist)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    Math.floor(Date.now() / 1000),
+    turn.user_message,
+    turn.intent || null,
+    turn.dj_say || null,
+    turn.play_titles_json || null,
+    turn.queue_action || null,
+    turn.feedback_extract_json || null,
+    turn.context_now_title || null,
+    turn.context_now_artist || null,
+  );
+}
+
+export function recentChatTurns(limit = 10) {
+  return db.prepare(`SELECT * FROM chat_turns ORDER BY ts DESC LIMIT ?`).all(limit);
+}
+
+export function feedbackStats() {
+  const fb = db.prepare(`SELECT signal, COUNT(*) as count FROM feedback GROUP BY signal`).all();
+  const playCount = db.prepare(`SELECT COUNT(*) as c FROM play_events`).get().c;
+  const turnsCount = db.prepare(`SELECT COUNT(*) as c FROM chat_turns`).get().c;
+  const out = { play_events: playCount, chat_turns: turnsCount };
+  for (const row of fb) out[row.signal] = row.count;
+  return out;
 }
 
 export default db;
