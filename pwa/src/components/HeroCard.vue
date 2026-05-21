@@ -265,12 +265,7 @@ function sendFeedback(signal) {
   emit('feedback', signal);
   flashedSignal.value = signal;
   setTimeout(() => { flashedSignal.value = null; }, 600);
-  // Push local user reaction message
-  emit('user-message', {
-    ts: new Date().toISOString(),
-    kind: 'reaction',
-    text: SIGNAL_LABELS[signal] || signal,
-  });
+  // Server broadcasts the confirmation via WS; no local emit needed
 }
 </script>
 

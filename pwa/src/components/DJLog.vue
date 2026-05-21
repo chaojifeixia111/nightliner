@@ -23,6 +23,9 @@
           <template v-else-if="msg.kind === 'opening'">
             <span class="cli-prompt">&gt; </span>{{ displayText(i, msg) }}
           </template>
+          <template v-else-if="msg.kind === 'chat_reply'">
+            <span class="chat-prompt">» </span>{{ displayText(i, msg) }}
+          </template>
           <template v-else-if="msg.kind === 'reaction'">
             <span class="reaction-text">reacted: {{ msg.text }}</span>
           </template>
@@ -82,6 +85,8 @@ let typingActive = false;
 function shouldRenderMessage(idx, msg) {
   // reaction / system 消息不参与排队,立即显示
   if (msg.kind === 'reaction' || msg.kind === 'system') return true;
+  // chat_reply: participates in typewriter queue
+  // (handled same as opening below)
   // 已经接管(在 typedTexts 里)的消息:有内容才显示;空字符串=排队中,先隐藏
   if (typedTexts.value.has(idx)) return typedTexts.value.get(idx).length > 0;
   // 历史消息(挂载前就在的)直接显示
@@ -123,7 +128,7 @@ watch(() => props.messages.length, (newLen, oldLen) => {
   const start = oldLen ?? 0;
   for (let i = start; i < newLen; i++) {
     const msg = props.messages[i];
-    if (msg && (msg.kind === 'opening' || msg.kind === 'song') && msg.text) {
+    if (msg && (msg.kind === 'opening' || msg.kind === 'song' || msg.kind === 'chat_reply') && msg.text) {
       enqueueTyping(i, msg.text);
     }
   }
@@ -158,12 +163,14 @@ function fmtTs(ts) {
 function speakerLabel(msg) {
   if (msg.kind === 'reaction') return ':USER';
   if (msg.kind === 'system') return ':SYSTEM';
+  if (msg.kind === 'chat_reply') return ':NIGHTLINERFM';
   return ':NIGHTLINERFM';
 }
 
 function speakerClass(msg) {
   if (msg.kind === 'reaction') return 'speaker-user';
   if (msg.kind === 'system') return 'system-label';
+  if (msg.kind === 'chat_reply') return 'speaker-chat';
   return 'speaker-claude';
 }
 
@@ -177,6 +184,7 @@ function bodyClass(msg) {
   if (msg.kind === 'reaction') return 'reaction-body';
   if (msg.kind === 'song') return 'song-body';
   if (msg.kind === 'system') return 'warn-text';
+  if (msg.kind === 'chat_reply') return 'chat-reply-body';
   return '';
 }
 </script>
@@ -227,6 +235,7 @@ function bodyClass(msg) {
 }
 .speaker-claude { color: var(--text-dim); }
 .speaker-user { color: var(--blue); }
+.speaker-chat { color: #5b9bd5; }
 .system-label { color: var(--warn); }
 .ts {
   font-family: 'JetBrains Mono', monospace;
@@ -247,7 +256,9 @@ function bodyClass(msg) {
   color: var(--blue);
   opacity: 0.85;
 }
+.chat-reply-body { color: #7fb8e0; }
 .cli-prompt { color: var(--text-dim); }
+.chat-prompt { color: #5b9bd5; }
 .song-prefix { color: var(--accent); }
 .warn-text { color: var(--warn); }
 </style>

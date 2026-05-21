@@ -127,7 +127,7 @@ function onCommand({ cmd, args }) {
     case '?':
       pushDjMessage({
         ts, kind: 'system',
-        text: '/clear  清空对话\n/help   显示命令\n/tuning 打开调音台\n/queue  打开队列',
+        text: '/clear          清空对话\n/help /?        显示命令\n/tuning         打开调音台\n/queue          打开队列\n/anti           查看 anti-list\n/cooldown       查看 cooldown 列表\n/history        查看最近对话历史\n/stats          查看反馈统计',
       });
       break;
     case 'tuning':
@@ -135,6 +135,40 @@ function onCommand({ cmd, args }) {
       break;
     case 'queue':
       queueOpen.value = true;
+      break;
+    case 'anti':
+    case 'antilist':
+      fetch('/api/state/anti').then(r => r.json()).then(items => {
+        const lines = items.length
+          ? items.map(s => `🚫 ${s.song_title} / ${s.song_artist}`).join('\n')
+          : '(空)';
+        pushDjMessage({ ts: new Date().toISOString(), kind: 'system',
+          text: `Anti-list (${items.length} 条):\n${lines}` });
+      }).catch(e => pushDjMessage({ ts: new Date().toISOString(), kind: 'system', text: `错误: ${e.message}` }));
+      break;
+    case 'cooldown':
+      fetch('/api/state/cooldown').then(r => r.json()).then(items => {
+        const lines = items.length
+          ? items.map(s => `🔁 ${s.song_title} / ${s.song_artist} (until ${new Date(s.cooldown_until * 1000).toLocaleDateString()})`).join('\n')
+          : '(空)';
+        pushDjMessage({ ts: new Date().toISOString(), kind: 'system',
+          text: `Cooldown (${items.length} 条):\n${lines}` });
+      }).catch(e => pushDjMessage({ ts: new Date().toISOString(), kind: 'system', text: `错误: ${e.message}` }));
+      break;
+    case 'history':
+      fetch('/api/state/history').then(r => r.json()).then(items => {
+        const lines = items.length
+          ? items.map(t => `[${new Date(t.ts * 1000).toLocaleTimeString()}] ${t.intent}: "${(t.user_message || '').slice(0, 40)}" → ${(t.dj_say || '').slice(0, 50)}`).join('\n')
+          : '(空)';
+        pushDjMessage({ ts: new Date().toISOString(), kind: 'system',
+          text: `最近对话 (${items.length} 条):\n${lines}` });
+      }).catch(e => pushDjMessage({ ts: new Date().toISOString(), kind: 'system', text: `错误: ${e.message}` }));
+      break;
+    case 'stats':
+      fetch('/api/state/stats').then(r => r.json()).then(s => {
+        pushDjMessage({ ts: new Date().toISOString(), kind: 'system',
+          text: `❤ love: ${s.love || 0}\n✗ wrong_vibe: ${s.wrong_vibe || 0}\n🔁 too_familiar: ${s.too_familiar || 0}\n🚫 never_again: ${s.never_again || 0}\nplay events: ${s.play_events || 0}\nchat turns: ${s.chat_turns || 0}` });
+      }).catch(e => pushDjMessage({ ts: new Date().toISOString(), kind: 'system', text: `错误: ${e.message}` }));
       break;
     default:
       pushDjMessage({
