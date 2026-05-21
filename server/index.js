@@ -7,7 +7,8 @@ import fs from 'fs/promises';
 import { buildChatPrompt } from './context-builder.js';
 import { callLlm, extractJson } from './llm-adapter.js';
 import { resolvePlayList } from './playback-coordinator.js';
-import { recordFeedback, recordPlay, recordQueue } from './state-db.js';
+import { recordFeedback, recordPlay, recordQueue, recordChatTurn, recentChatTurns, antiList, activeCooldowns, feedbackStats } from './state-db.js';
+import { recommendSongs, personalFm } from './ncm-client.js';
 
 const config = yaml.parse(await fs.readFile('config.yaml', 'utf8'));
 const PORT = config.server.port;
@@ -39,6 +40,39 @@ let tuning = {
   queue_length: 10,
   chattiness: 'medium',
 };
+
+// Recommend pool cache (refreshed every 30 min)
+let recommendCache = { ts: 0, songs: [] };
+
+async function getRecommendPool() {
+  const THIRTY_MIN = 30 * 60 * 1000;
+  if (Date.now() - recommendCache.ts < THIRTY_MIN && recommendCache.songs.length) {
+    return recommendCache.songs;
+  }
+  try {
+    const data = await recommendSongs(20);
+    const songs = (data?.data?.dailySongs || []).map(s => ({
+      name: s.name,
+      artist: (s.ar || []).map(a => a.name).join(' / '),
+    }));
+    if (songs.length) {
+      recommendCache = { ts: Date.now(), songs };
+      console.log(`[recommend] pool refreshed: ${songs.length} songs`);
+    } else {
+      // fallback to personal FM
+      const fm = await personalFm();
+      const fmSongs = (fm?.data || []).map(s => ({
+        name: s.name,
+        artist: (s.ar || s.artists || []).map(a => a.name).join(' / '),
+      }));
+      recommendCache = { ts: Date.now(), songs: fmSongs };
+      console.log(`[recommend] pool from personalFm: ${fmSongs.length} songs`);
+    }
+  } catch (e) {
+    console.warn('[recommend] pool fetch failed:', e.message);
+  }
+  return recommendCache.songs;
+}
 
 // Netease snapshot cache for hit-rate stats
 let _snapshotNorm = null;
@@ -98,74 +132,134 @@ app.post('/api/chat', async (req, res) => {
   broadcast({ type: 'thinking', data: true });
 
   try {
+    const recommendPool = await getRecommendPool();
     const prompt = await buildChatPrompt({
       userMessage: message,
       currentQueue,
       n: tuning.queue_length,
       exploration_pct: tuning.exploration_pct,
+      recommendPool,
     });
     const raw = await callLlm({ prompt, model: config.models.chat_mode, trigger: 'chat' });
     const parsed = extractJson(raw);
 
-    const resolved = await resolvePlayList(parsed.play);
-    const playable = resolved.filter(s => s.found);
+    const intent = parsed.intent || 'recommend';
+    console.log(`[chat] intent=${intent}, say="${(parsed.say || '').slice(0, 40)}..."`);
 
-    // Compute stats early so we can log them with queueAction
-    const snapshotNorm = await getSnapshotNorm();
-    let library_hits = 0;
-    let recommend = 0;
-    let wildcard = 0;
-    for (let i = 0; i < parsed.play?.length; i++) {
-      const sp = parsed.play[i]?.source_pool || '';
-      if (sp === 'library') library_hits++;
-      else if (sp === 'recommend') recommend++;
-      else wildcard++;
-    }
-    console.log(`[chat] queueAction=${parsed.queueAction}, library_hits=${library_hits}/${parsed.play?.length || 0}`);
+    // Memory tracking
+    let recordedPlayTitles = [];
+    let recordedFeedback = null;
 
-    if (parsed.queueAction === 'rewrite_tail' && currentQueue.length) {
-      const idxNow = now ? currentQueue.findIndex(s => s.title === now.title) : -1;
-      // Keep only the currently playing song (not history), then append new playable
-      const head = idxNow >= 0 ? [currentQueue[idxNow]] : [];
-      currentQueue = [...head, ...playable];
-    } else if (parsed.queueAction === 'insert_next') {
-      const idxNow = now ? currentQueue.findIndex(s => s.title === now.title) : -1;
-      currentQueue.splice(idxNow + 1, 0, ...playable);
+    const ts = new Date().toISOString();
+
+    if (intent === 'recommend') {
+      // Resolve play list → NCM URLs
+      const plays = Array.isArray(parsed.play) ? parsed.play : [];
+      const resolved = await resolvePlayList(plays);
+      const playable = resolved.filter(s => s.found);
+
+      // Compute hit stats
+      const snapshotNorm = await getSnapshotNorm();
+      let library_hits = 0;
+      let recommendHits = 0;
+      let wildcard = 0;
+      for (let i = 0; i < plays.length; i++) {
+        const sp = plays[i]?.source_pool || '';
+        if (sp === 'library') library_hits++;
+        else if (sp === 'recommend') recommendHits++;
+        else wildcard++;
+      }
+      console.log(`[chat] queueAction=${parsed.queueAction}, library_hits=${library_hits}/${plays.length}`);
+
+      if (parsed.queueAction === 'rewrite_tail' && currentQueue.length) {
+        const idxNow = now ? currentQueue.findIndex(s => s.title === now.title) : -1;
+        const head = idxNow >= 0 ? [currentQueue[idxNow]] : [];
+        currentQueue = [...head, ...playable];
+      } else if (parsed.queueAction === 'insert_next') {
+        const idxNow = now ? currentQueue.findIndex(s => s.title === now.title) : -1;
+        currentQueue.splice(idxNow + 1, 0, ...playable);
+      } else {
+        currentQueue = playable;
+        now = playable[0] || null;
+      }
+
+      recordQueue({ mode: 'chat', songs: currentQueue });
+      broadcast({ type: 'queue', data: currentQueue });
+      broadcast({ type: 'now', data: now });
+
+      // DJ opening
+      broadcast({ type: 'dj_message', data: { ts, kind: 'opening', text: parsed.say } });
+      // Per-song reasons
+      for (let i = 0; i < playable.length; i++) {
+        const s = playable[i];
+        const reason = plays[i]?.reason || '';
+        if (reason) {
+          broadcast({ type: 'dj_message', data: { ts, kind: 'song', title: s.title, text: reason } });
+        }
+      }
+
+      // Stats broadcast
+      const vip_skipped = resolved.filter(s => !s.found && s.ncm_id).length;
+      const not_found = resolved.filter(s => !s.found && !s.ncm_id).length;
+      broadcast({
+        type: 'stats',
+        data: {
+          library_hits,
+          recommend: recommendHits,
+          wildcard,
+          vip_skipped,
+          not_found,
+          total: plays.length,
+        },
+      });
+
+      recordedPlayTitles = plays.map(p => ({ title: p.title, artist: p.artist }));
+
+    } else if (intent === 'feedback') {
+      const fb = parsed.feedback_extract;
+      if (fb) {
+        const isCategory = !!fb.target_category && !fb.target_title;
+        recordFeedback({
+          song_title: fb.target_title || fb.target_category || '(unknown)',
+          song_artist: fb.target_artist || '(category)',
+          signal: fb.signal,
+          context_json: { reason: fb.reason, source: 'chat_extracted', scope: isCategory ? 'category' : 'song' },
+        });
+        recordedFeedback = fb;
+
+        // Broadcast say (DJ acknowledgment)
+        broadcast({ type: 'dj_message', data: { ts, kind: 'opening', text: parsed.say } });
+
+        // Broadcast system confirmation
+        const target = fb.target_title
+          ? `"${fb.target_title} / ${fb.target_artist}"`
+          : `"${fb.target_category}"`;
+        const sigLabel = { love: '❤ love', wrong_vibe: '✗ wrong_vibe', too_familiar: '🔁 too_familiar', never_again: '🚫 never_again' }[fb.signal] || fb.signal;
+        broadcast({ type: 'dj_message', data: {
+          ts, kind: 'system',
+          text: `记住了 — ${target} 标记为 ${sigLabel}${fb.reason ? ' · ' + fb.reason : ''}`,
+        }});
+      }
+
     } else {
-      currentQueue = playable;
-      now = playable[0] || null;
+      // intent === 'chat': just broadcast say, no queue change
+      broadcast({ type: 'dj_message', data: { ts, kind: 'chat_reply', text: parsed.say } });
     }
 
-    recordQueue({ mode: 'chat', songs: currentQueue });
-    broadcast({ type: 'queue', data: currentQueue });
-    broadcast({ type: 'now', data: now });
     broadcast({ type: 'thinking', data: false });
 
-    // Broadcast DJ messages (opening + per-song reasons)
-    const ts = new Date().toISOString();
-    broadcast({ type: 'dj_message', data: { ts, kind: 'opening', text: parsed.say } });
-    for (let i = 0; i < playable.length; i++) {
-      const s = playable[i];
-      const reason = parsed.play?.[i]?.reason || '';
-      if (reason) {
-        broadcast({ type: 'dj_message', data: { ts, kind: 'song', title: s.title, text: reason } });
-      }
-    }
-
-    // Broadcast stats
-    const vip_skipped = resolved.filter(s => !s.found && s.ncm_id).length;
-    const not_found = resolved.filter(s => !s.found && !s.ncm_id).length;
-    broadcast({
-      type: 'stats',
-      data: {
-        library_hits,
-        recommend,
-        wildcard,
-        vip_skipped,
-        not_found,
-        total: parsed.play?.length || 0,
-      },
+    // Always record the turn for persistent memory
+    recordChatTurn({
+      user_message: message,
+      intent,
+      dj_say: parsed.say,
+      play_titles_json: JSON.stringify(recordedPlayTitles),
+      queue_action: parsed.queueAction || null,
+      feedback_extract_json: recordedFeedback ? JSON.stringify(recordedFeedback) : null,
+      context_now_title: now?.title || null,
+      context_now_artist: now?.artist || null,
     });
+
   } catch (e) {
     console.error('chat error:', e);
     broadcast({ type: 'thinking', data: false });
@@ -185,6 +279,12 @@ app.post('/api/feedback', (req, res) => {
   if (!title || !artist || !signal) return res.status(400).json({ error: 'fields missing' });
   recordFeedback({ song_title: title, song_artist: artist, signal });
   res.json({ ok: true });
+  // Broadcast server-side confirmation so DJLog shows it
+  const sigLabel = { love: '❤ love', wrong_vibe: '✗ wrong_vibe', too_familiar: '🔁 too_familiar', never_again: '🚫 never_again' }[signal] || signal;
+  broadcast({ type: 'dj_message', data: {
+    ts: new Date().toISOString(), kind: 'system',
+    text: `记住了 — "${title} / ${artist}" 标记为 ${sigLabel}`,
+  }});
 });
 
 // POST /api/play-event
@@ -279,6 +379,12 @@ app.post('/api/previous', (req, res) => {
   broadcast({ type: 'now', data: now });
   res.json({ ok: true, now });
 });
+
+// GET /api/state/* — transparency endpoints for slash commands
+app.get('/api/state/anti', (req, res) => res.json(antiList()));
+app.get('/api/state/cooldown', (req, res) => res.json(activeCooldowns()));
+app.get('/api/state/history', (req, res) => res.json(recentChatTurns(10)));
+app.get('/api/state/stats', (req, res) => res.json(feedbackStats()));
 
 server.listen(PORT, config.server.host, () => {
   console.log(`NightlinerFM server on http://${config.server.host}:${PORT}`);
