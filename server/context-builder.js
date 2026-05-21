@@ -1,7 +1,7 @@
 // server/context-builder.js
-// 拼装 chat-mode prompt 的 7 个片段（含 netease 曲库）
+// 拼装 chat-mode prompt 的 9 个片段（含 netease 曲库 + 推荐池 + 对话历史）
 import fs from 'fs/promises';
-import db, { recentPlays, recentFeedback, antiList, activeCooldowns } from './state-db.js';
+import db, { recentPlays, recentFeedback, antiList, activeCooldowns, recentChatTurns } from './state-db.js';
 
 const TEMPLATE_PATH = 'prompts/chat-mode.md';
 const SNAPSHOT_PATH = 'data/netease-snapshot.json';
@@ -93,7 +93,39 @@ function fmtSongList(rows) {
   return rows.map(r => `- ${r.song_title} / ${r.song_artist}`).join('\n');
 }
 
-export async function buildChatPrompt({ userMessage, currentQueue, n = 5, exploration_pct = 30 }) {
+function fmtRecommendPool(songs) {
+  if (!songs || !songs.length) return '(暂无推荐池数据)';
+  return songs.map((s, i) => `${i + 1}. ${s.name} / ${s.artist}`).join('\n');
+}
+
+function fmtChatHistory(turns) {
+  if (!turns || !turns.length) return '(本会话首次对话)';
+  // turns from DB are DESC order; reverse to get chronological
+  const chronological = [...turns].reverse();
+  const now = Math.floor(Date.now() / 1000);
+  return chronological.map(t => {
+    const minAgo = Math.round((now - t.ts) / 60);
+    let lines = `[${minAgo}分钟前 · 用户] ${t.user_message}`;
+    lines += `\n[DJ ${t.intent || '?'}] ${t.dj_say || ''}`;
+    if (t.intent === 'recommend' && t.play_titles_json) {
+      try {
+        const plays = JSON.parse(t.play_titles_json);
+        if (plays.length) {
+          lines += `\n      推: ${plays.map(p => p.title).join(', ')}`;
+        }
+      } catch {}
+    }
+    if (t.intent === 'feedback' && t.feedback_extract_json) {
+      try {
+        const fb = JSON.parse(t.feedback_extract_json);
+        lines += `\n      记: target=${fb.target_title || fb.target_category || '?'}, signal=${fb.signal || '?'}, reason=${fb.reason || '?'}`;
+      } catch {}
+    }
+    return lines;
+  }).join('\n\n');
+}
+
+export async function buildChatPrompt({ userMessage, currentQueue, n = 5, exploration_pct = 30, recommendPool = [] }) {
   const template = await fs.readFile(TEMPLATE_PATH, 'utf8');
   const djPersona = await readOrEmpty('user/dj-persona.md');
   const taste = await readOrEmpty('user/taste.md');
@@ -103,6 +135,7 @@ export async function buildChatPrompt({ userMessage, currentQueue, n = 5, explor
 
   const now = new Date();
   const dow = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][now.getDay()];
+  const chatHistory = recentChatTurns(5);
 
   return template
     .replace('{{DJ_PERSONA}}', djPersona || '(dj-persona.md 为空)')
@@ -122,5 +155,7 @@ export async function buildChatPrompt({ userMessage, currentQueue, n = 5, explor
         : '(当前 queue 为空)')
     .replace('{{N}}', String(n))
     .replace('{{EXPLORATION_PCT}}', String(exploration_pct))
-    .replace('{{LIBRARY_NETEASE}}', librarySlice);
+    .replace('{{LIBRARY_NETEASE}}', librarySlice)
+    .replace('{{CHAT_HISTORY}}', fmtChatHistory(chatHistory))
+    .replace('{{RECOMMEND_POOL}}', fmtRecommendPool(recommendPool));
 }
