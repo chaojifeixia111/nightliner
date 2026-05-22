@@ -84,7 +84,12 @@ function fmtFeedback(fbs) {
   if (!fbs.length) return '(无最近反馈)';
   return fbs.map(f => {
     const ago = Math.round((Date.now() / 1000 - f.ts) / 60);
-    return `- [${f.signal}] ${f.song_title} / ${f.song_artist} (${ago}min前)`;
+    let reasonPart = '';
+    try {
+      const ctx = f.context_json ? JSON.parse(f.context_json) : null;
+      if (ctx?.reason) reasonPart = ` · 原因:${ctx.reason}`;
+    } catch {}
+    return `- [${f.signal}] ${f.song_title} / ${f.song_artist} (${ago}min前)${reasonPart}`;
   }).join('\n');
 }
 

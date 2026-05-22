@@ -275,15 +275,26 @@ app.get('/api/queue', (req, res) => res.json(currentQueue));
 
 // POST /api/feedback
 app.post('/api/feedback', (req, res) => {
-  const { title, artist, signal } = req.body;
+  const { title, artist, signal, reason } = req.body;
   if (!title || !artist || !signal) return res.status(400).json({ error: 'fields missing' });
-  recordFeedback({ song_title: title, song_artist: artist, signal });
+  recordFeedback({
+    song_title: title,
+    song_artist: artist,
+    signal,
+    context_json: reason ? { reason, source: 'button' } : { source: 'button' },
+  });
   res.json({ ok: true });
-  // Broadcast server-side confirmation so DJLog shows it
-  const sigLabel = { love: '❤ love', wrong_vibe: '✗ wrong_vibe', too_familiar: '🔁 too_familiar', never_again: '🚫 never_again' }[signal] || signal;
+  // Broadcast confirmation
+  const sigLabel = {
+    love: '❤ love',
+    wrong_vibe: '✗ wrong_vibe',
+    too_familiar: '🔁 too_familiar',
+    never_again: '🚫 never_again',
+  }[signal] || signal;
+  const reasonSuffix = reason ? ` · ${reason}` : '';
   broadcast({ type: 'dj_message', data: {
     ts: new Date().toISOString(), kind: 'system',
-    text: `记住了 — "${title} / ${artist}" 标记为 ${sigLabel}`,
+    text: `记住了 — "${title} / ${artist}" 标记为 ${sigLabel}${reasonSuffix}`,
   }});
 });
 
