@@ -80,8 +80,12 @@ onMounted(() => {
 
 onUnmounted(() => ws?.close());
 
-function onFeedback(signal) {
-  if (state.now) sendFeedback({ ...state.now, signal });
+function onFeedback(payload) {
+  // backward compat: support string OR object
+  const { signal, reason } = typeof payload === 'string'
+    ? { signal: payload, reason: null }
+    : payload;
+  if (state.now) sendFeedback({ ...state.now, signal, reason });
 }
 
 function onChat(text) {

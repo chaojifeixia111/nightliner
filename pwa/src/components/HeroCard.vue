@@ -52,40 +52,20 @@
 
       <div class="ctrl-spacer"></div>
 
-      <!-- Expandable feedback -->
-      <div
-        class="feedback-wrap"
-        @mouseenter="feedbackExpanded = true"
-        @mouseleave="feedbackExpanded = false"
-      >
-        <transition name="feedback-expand">
-          <div v-if="feedbackExpanded" class="feedback-extra">
-            <button
-              class="fb-btn"
-              :class="{ flashed: flashedSignal === 'never_again' }"
-              title="别再播"
-              @click="sendFeedback('never_again')"
-            >🚫</button>
-            <button
-              class="fb-btn"
-              :class="{ flashed: flashedSignal === 'too_familiar' }"
-              title="太熟了"
-              @click="sendFeedback('too_familiar')"
-            >🔁</button>
-            <button
-              class="fb-btn"
-              :class="{ flashed: flashedSignal === 'wrong_vibe' }"
-              title="不对味"
-              @click="sendFeedback('wrong_vibe')"
-            >✗</button>
-          </div>
-        </transition>
+      <!-- Two-button feedback + expandable dislike panel -->
+      <div class="feedback-zone">
         <button
-          class="fb-btn fb-heart"
+          class="fb-btn fb-love"
           :class="{ flashed: flashedSignal === 'love' }"
           title="喜欢"
-          @click="sendFeedback('love')"
+          @click="quickLove"
         >♥</button>
+        <button
+          class="fb-btn fb-dislike"
+          :class="{ flashed: dislikePanelOpen, 'sticky-flash': stickyFlash }"
+          title="不喜欢…"
+          @click="dislikePanelOpen = !dislikePanelOpen"
+        >✗</button>
       </div>
 
       <!-- Volume -->
@@ -102,6 +82,43 @@
         />
       </div>
     </div>
+
+    <transition name="dislike-panel">
+      <div v-if="dislikePanelOpen" class="dislike-panel">
+        <div class="panel-header">为什么不喜欢? <span class="panel-hint">(选一个 · 文字可选)</span></div>
+        <div class="radio-row">
+          <label
+            v-for="opt in DISLIKE_OPTIONS"
+            :key="opt.signal"
+            class="radio-pill"
+            :class="{ active: selectedSignal === opt.signal }"
+          >
+            <input
+              type="radio"
+              name="dislike-signal"
+              :value="opt.signal"
+              v-model="selectedSignal"
+            />
+            <span class="radio-label">{{ opt.emoji }} {{ opt.label }}</span>
+          </label>
+        </div>
+        <textarea
+          v-model="dislikeReason"
+          class="reason-input"
+          placeholder="例:听腻了 / 旋律太密 / 不在状态"
+          rows="2"
+          maxlength="200"
+        ></textarea>
+        <div class="panel-actions">
+          <button class="panel-btn cancel" @click="cancelDislike">取消</button>
+          <button
+            class="panel-btn submit"
+            :disabled="!selectedSignal"
+            @click="submitDislike"
+          >提交</button>
+        </div>
+      </div>
+    </transition>
 
     <audio
       ref="audio"
@@ -149,9 +166,18 @@ const progressPct = ref(0);
 let lastReportedSec = 0;
 let seeking = false;
 
-// Feedback expand state
-const feedbackExpanded = ref(false);
+// Feedback state
+const dislikePanelOpen = ref(false);
+const selectedSignal = ref(null);   // 'wrong_vibe' | 'too_familiar' | 'never_again'
+const dislikeReason = ref('');
+const stickyFlash = ref(false);     // confirmation pulse after dislike submit
 const flashedSignal = ref(null);
+
+const DISLIKE_OPTIONS = [
+  { signal: 'wrong_vibe',   emoji: '✗',  label: '不对味' },
+  { signal: 'too_familiar', emoji: '🔁', label: '太熟了' },
+  { signal: 'never_again',  emoji: '🚫', label: '别再播' },
+];
 
 function fmtTime(sec) {
   const s = Math.floor(sec || 0);
@@ -254,18 +280,31 @@ function reportPlayEvent(reason, playedSec) {
   });
 }
 
-const SIGNAL_LABELS = {
-  love: '♥ love',
-  wrong_vibe: '✗ wrong_vibe',
-  too_familiar: '🔁 too_familiar',
-  never_again: '🚫 never_again',
-};
+function quickLove() {
+  emit('feedback', { signal: 'love', reason: null });
+  flashedSignal.value = 'love';
+  setTimeout(() => { flashedSignal.value = null; }, 2000);
+}
 
-function sendFeedback(signal) {
-  emit('feedback', signal);
-  flashedSignal.value = signal;
-  setTimeout(() => { flashedSignal.value = null; }, 600);
-  // Server broadcasts the confirmation via WS; no local emit needed
+function submitDislike() {
+  if (!selectedSignal.value) return;
+  emit('feedback', {
+    signal: selectedSignal.value,
+    reason: dislikeReason.value.trim() || null,
+  });
+  // visual confirmation
+  stickyFlash.value = true;
+  setTimeout(() => { stickyFlash.value = false; }, 2500);
+  // reset and close
+  dislikePanelOpen.value = false;
+  selectedSignal.value = null;
+  dislikeReason.value = '';
+}
+
+function cancelDislike() {
+  dislikePanelOpen.value = false;
+  selectedSignal.value = null;
+  dislikeReason.value = '';
 }
 </script>
 
@@ -471,17 +510,12 @@ function sendFeedback(signal) {
   color: var(--accent);
 }
 
-/* Feedback expand */
-.feedback-wrap {
+/* Feedback zone */
+.feedback-zone {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   position: relative;
-}
-.feedback-extra {
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 .fb-btn {
   background: none;
@@ -494,30 +528,142 @@ function sendFeedback(signal) {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition: color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
   border-radius: 2px;
 }
-.fb-btn:hover {
+.fb-love {
   color: var(--accent);
   border-color: var(--blue);
 }
-.fb-heart {
+.fb-love.flashed {
+  background: rgba(220, 80, 110, 0.25);
+  border-color: #d8506e;
+  color: #ffb3c1;
+  box-shadow: 0 0 14px rgba(216, 80, 110, 0.5);
+}
+.fb-dislike {
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+.fb-dislike:hover {
   color: var(--accent);
   border-color: var(--blue);
 }
-.fb-btn.flashed {
+.fb-dislike.flashed {
   background: var(--blue-glow);
   border-color: var(--blue);
   color: var(--accent);
 }
-.feedback-expand-enter-active,
-.feedback-expand-leave-active {
+.fb-dislike.sticky-flash {
+  background: var(--blue-glow);
+  border-color: var(--blue);
+  color: var(--accent);
+  box-shadow: 0 0 12px var(--blue-glow);
+}
+
+/* Dislike panel */
+.dislike-panel {
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.panel-header {
+  font-size: 12px;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+}
+.panel-hint {
+  color: var(--text-dim);
+  font-size: 10px;
+  margin-left: 4px;
+}
+.radio-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.radio-pill {
+  flex: 1;
+  min-width: 90px;
+  cursor: pointer;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.radio-pill:hover { border-color: var(--blue-dim); color: var(--text); }
+.radio-pill.active {
+  border-color: var(--blue);
+  color: var(--accent);
+  background: var(--blue-glow);
+}
+.radio-pill input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.reason-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  resize: none;
+  outline: none;
+  border-radius: 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.reason-input:focus { border-color: var(--blue); }
+.reason-input::placeholder { color: var(--text-dim); opacity: 0.7; }
+.panel-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.panel-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  transition: all 0.15s;
+}
+.panel-btn.cancel:hover { color: var(--text); border-color: var(--text-dim); }
+.panel-btn.submit {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+.panel-btn.submit:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.panel-btn.submit:hover:not(:disabled) { opacity: 0.85; }
+
+.dislike-panel-enter-active,
+.dislike-panel-leave-active {
   transition: opacity 0.2s, transform 0.2s;
 }
-.feedback-expand-enter-from,
-.feedback-expand-leave-to {
+.dislike-panel-enter-from,
+.dislike-panel-leave-to {
   opacity: 0;
-  transform: translateX(8px);
+  transform: translateY(-8px);
 }
 
 /* Volume */
