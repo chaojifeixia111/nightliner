@@ -52,20 +52,27 @@
 
       <div class="ctrl-spacer"></div>
 
-      <!-- Two-button feedback + expandable dislike panel -->
-      <div class="feedback-zone">
+      <!-- Feedback: ❤ always visible, hover to reveal × -->
+      <div
+        class="feedback-zone"
+        @mouseenter="feedbackHovered = true"
+        @mouseleave="feedbackHovered = false"
+      >
+        <transition name="dislike-reveal">
+          <button
+            v-if="feedbackHovered || dislikePanelOpen"
+            class="fb-btn fb-dislike"
+            :class="{ flashed: dislikePanelOpen, 'sticky-flash': stickyFlash }"
+            title="不喜欢…"
+            @click="dislikePanelOpen = !dislikePanelOpen"
+          >×</button>
+        </transition>
         <button
           class="fb-btn fb-love"
           :class="{ flashed: flashedSignal === 'love' }"
           title="喜欢"
           @click="quickLove"
         >♥</button>
-        <button
-          class="fb-btn fb-dislike"
-          :class="{ flashed: dislikePanelOpen, 'sticky-flash': stickyFlash }"
-          title="不喜欢…"
-          @click="dislikePanelOpen = !dislikePanelOpen"
-        >✗</button>
       </div>
 
       <!-- Volume -->
@@ -167,6 +174,7 @@ let lastReportedSec = 0;
 let seeking = false;
 
 // Feedback state
+const feedbackHovered = ref(false); // ❤ 上 hover 才显示 ×
 const dislikePanelOpen = ref(false);
 const selectedSignal = ref(null);   // 'wrong_vibe' | 'too_familiar' | 'never_again'
 const dislikeReason = ref('');
@@ -174,7 +182,7 @@ const stickyFlash = ref(false);     // confirmation pulse after dislike submit
 const flashedSignal = ref(null);
 
 const DISLIKE_OPTIONS = [
-  { signal: 'wrong_vibe',   emoji: '✗',  label: '不对味' },
+  { signal: 'wrong_vibe',   emoji: '×',  label: '不对味' },
   { signal: 'too_familiar', emoji: '🔁', label: '太熟了' },
   { signal: 'never_again',  emoji: '🚫', label: '别再播' },
 ];
@@ -664,6 +672,25 @@ function cancelDislike() {
 .dislike-panel-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+}
+
+/* × 按钮 hover 展开动效 */
+.dislike-reveal-enter-active,
+.dislike-reveal-leave-active {
+  transition: opacity 0.18s, transform 0.18s;
+}
+.dislike-reveal-enter-from,
+.dislike-reveal-leave-to {
+  opacity: 0;
+  transform: translateX(8px);
+}
+
+/* × 用直线字体(避免衬线弯角) */
+.fb-dislike {
+  font-family: Arial, sans-serif;  /* Arial 的 × 是干净的直线 */
+  font-size: 18px;
+  font-weight: 300;
+  line-height: 1;
 }
 
 /* Volume */
