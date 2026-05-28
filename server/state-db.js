@@ -3,6 +3,7 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
+import * as sqliteVec from 'sqlite-vec';
 
 const DB_PATH = 'data/state.db';
 
@@ -75,12 +76,18 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_play_events_ts ON play_events(ts);
     CREATE INDEX IF NOT EXISTS idx_feedback_ts ON feedback(ts);
     CREATE INDEX IF NOT EXISTS idx_chat_turns_ts ON chat_turns(ts);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS vec_embeddings USING vec0(
+      embedding_id INTEGER PRIMARY KEY,
+      embedding FLOAT[1024]
+    );
   `);
 }
 
 ensureDir();
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
+sqliteVec.load(db);
 migrate(db);
 
 export function recordPlay(event) {
