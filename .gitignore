@@ -1,4 +1,8 @@
 node_modules/
+.cache/
+logs/
+*.err
+*.out
 data/state.db
 data/state.db-journal
 data/llm-calls.jsonl
