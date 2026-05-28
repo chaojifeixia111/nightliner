@@ -4,11 +4,13 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 import yaml from 'yaml';
 import fs from 'fs/promises';
-import { buildChatPrompt } from './context-builder.js';
+import { buildChatMessages } from './context-builder.js';
 import { callLlm, extractJson } from './llm-adapter.js';
 import { resolvePlayList } from './playback-coordinator.js';
 import { recordFeedback, recordPlay, recordQueue, recordChatTurn, recentChatTurns, antiList, activeCooldowns, feedbackStats } from './state-db.js';
 import { recommendSongs, personalFm } from './ncm-client.js';
+import { warmup } from './embedder.js';
+import { indexAllSongs, indexAllFeedback, indexAllChatTurns, indexMdFile } from './indexer.js';
 
 const config = yaml.parse(await fs.readFile('config.yaml', 'utf8'));
 const PORT = config.server.port;
@@ -133,14 +135,15 @@ app.post('/api/chat', async (req, res) => {
 
   try {
     const recommendPool = await getRecommendPool();
-    const prompt = await buildChatPrompt({
+    const { system, messages } = await buildChatMessages({
       userMessage: message,
       currentQueue,
       n: tuning.queue_length,
       exploration_pct: tuning.exploration_pct,
       recommendPool,
+      now,
     });
-    const raw = await callLlm({ prompt, model: config.models.chat_mode, trigger: 'chat' });
+    const raw = await callLlm({ system, messages, model: config.models.chat_mode, trigger: 'chat' });
     const parsed = extractJson(raw);
 
     const intent = parsed.intent || 'recommend';
@@ -397,6 +400,25 @@ app.get('/api/state/cooldown', (req, res) => res.json(activeCooldowns()));
 app.get('/api/state/history', (req, res) => res.json(recentChatTurns(10)));
 app.get('/api/state/stats', (req, res) => res.json(feedbackStats()));
 
-server.listen(PORT, config.server.host, () => {
+server.listen(PORT, config.server.host, async () => {
   console.log(`NightlinerFM server on http://${config.server.host}:${PORT}`);
+
+  console.log('[startup] warming up BGE-M3...');
+  await warmup();
+  console.log('[startup] BGE-M3 ready');
+
+  console.log('[startup] incremental index...');
+  const t0 = Date.now();
+  const s = await indexAllSongs();
+  const fb = await indexAllFeedback();
+  const ct = await indexAllChatTurns();
+  const mdTargets = [
+    ['user/taste.md', 'taste'],
+    ['user/life-stages.md', 'life_stage'],
+    ['user/mood-rules.md', 'mood_rule'],
+    ['user/dj-persona.md', 'persona'],
+    ['user/vibe-anchors.md', 'vibe_anchor'],
+  ];
+  for (const [p, t] of mdTargets) await indexMdFile(p, t);
+  console.log(`[startup] index done in ${((Date.now() - t0) / 1000).toFixed(1)}s (songs +${s.added}, fb +${fb.added}, turns +${ct.added})`);
 });
