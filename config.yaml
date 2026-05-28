@@ -46,3 +46,23 @@ signal_thresholds:
 server:
   port: 8080
   host: 127.0.0.1
+
+# RAG (BGE-M3 本地 embedding + sqlite-vec 检索) v0.5
+rag:
+  enabled: true
+  retrieval:
+    song_top_k: 30        # 曲库召回 (主要 prompt 体积来源)
+    feedback_top_k: 8     # 反馈召回
+    life_stage_top_k: 3
+    taste_top_k: 3
+    mood_rule_top_k: 2
+    vibe_anchor_top_k: 5
+    chat_turn_top_k: 3    # 语义历史轮 (近因仍走 messages[] 多轮回放)
+  embedding:
+    model: 'Xenova/bge-m3'  # 本地 ONNX q8 量化
+    dim: 1024
+    quantization: 'q8'
+  budget_enforcement:
+    enabled: true
+    deviation_threshold: 0.10   # source_pool 偏差 >10% 触发 retry
+    max_retries: 1
