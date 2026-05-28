@@ -204,3 +204,34 @@ export async function indexAllChatTurns() {
   }
   return { added, skipped };
 }
+
+export async function indexMdFile(path, source_type) {
+  let md;
+  try {
+    md = await fs.readFile(path, 'utf8');
+  } catch {
+    console.log(`[indexer] ${path} not found, skip`);
+    return { added: 0, skipped: 0 };
+  }
+  const chunks = chunkMarkdownByH2(md);
+  let added = 0, skipped = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    const c = chunks[i];
+    const source_id = `${path}:${c.heading || `chunk-${i}`}`;
+    if (getEmbeddingsBySource(source_type, source_id).length) {
+      skipped++;
+      continue;
+    }
+    const chunk_text = c.heading ? `## ${c.heading}\n${c.text}` : c.text;
+    const vec = await embed(chunk_text);
+    upsertEmbeddingRow({
+      source_type,
+      source_id,
+      chunk_text,
+      meta: { source: path, heading: c.heading },
+      embedding: vec,
+    });
+    added++;
+  }
+  return { added, skipped };
+}

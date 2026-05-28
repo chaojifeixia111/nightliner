@@ -1,7 +1,7 @@
 // scripts/index-all.js
 // 全量索引曲库 + 反馈 + chat_turns + MD 文件到 embeddings.
 // 注意: T8 只接入 songs. T9+T10 会扩展 fb/turns/MD.
-import { indexAllSongs, indexAllFeedback, indexAllChatTurns } from '../server/indexer.js';
+import { indexAllSongs, indexAllFeedback, indexAllChatTurns, indexMdFile } from '../server/indexer.js';
 import { countEmbeddings } from '../server/state-db.js';
 
 console.log('[index-all] start');
@@ -15,6 +15,18 @@ console.log(`[index-all] feedback: +${fbStats.added}, =${fbStats.skipped}`);
 
 const turnStats = await indexAllChatTurns();
 console.log(`[index-all] chat_turns: +${turnStats.added}, =${turnStats.skipped}`);
+
+const mdTargets = [
+  ['user/taste.md', 'taste'],
+  ['user/life-stages.md', 'life_stage'],
+  ['user/mood-rules.md', 'mood_rule'],
+  ['user/dj-persona.md', 'persona'],
+  ['user/vibe-anchors.md', 'vibe_anchor'],
+];
+for (const [path, type] of mdTargets) {
+  const s = await indexMdFile(path, type);
+  console.log(`[index-all] ${path}: +${s.added}, =${s.skipped}`);
+}
 
 const total = countEmbeddings();
 console.log(`[index-all] total embeddings in db: ${total}`);
