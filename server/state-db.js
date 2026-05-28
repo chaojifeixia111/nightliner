@@ -148,6 +148,17 @@ export function recordFeedback(fb) {
     `).run(fb.song_title, fb.song_artist, 'user marked never_again',
            Math.floor(Date.now() / 1000), 'song');
   }
+
+  // RAG: async index this feedback (fire-and-forget)
+  const lastId = db.prepare(`SELECT last_insert_rowid() as id`).get().id;
+  import('./indexer.js').then(m => m.indexFeedback({
+    id: lastId,
+    ts: Math.floor(Date.now() / 1000),
+    song_title: fb.song_title,
+    song_artist: fb.song_artist,
+    signal: fb.signal,
+    context_json: fb.context_json ? JSON.stringify(fb.context_json) : null,
+  })).catch(e => console.warn('[indexer] feedback failed:', e.message));
 }
 
 export function recentPlays(limit = 30) {
@@ -195,6 +206,18 @@ export function recordChatTurn(turn) {
     turn.context_now_title || null,
     turn.context_now_artist || null,
   );
+
+  // RAG: async index this turn (fire-and-forget)
+  const lastId = db.prepare(`SELECT last_insert_rowid() as id`).get().id;
+  import('./indexer.js').then(m => m.indexChatTurn({
+    id: lastId,
+    ts: Math.floor(Date.now() / 1000),
+    user_message: turn.user_message,
+    intent: turn.intent,
+    dj_say: turn.dj_say,
+    play_titles_json: turn.play_titles_json,
+    queue_action: turn.queue_action,
+  })).catch(e => console.warn('[indexer] turn failed:', e.message));
 }
 
 export function recentChatTurns(limit = 10) {

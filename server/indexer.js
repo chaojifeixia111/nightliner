@@ -2,7 +2,7 @@
 // 全量/增量索引 (曲库 / 反馈 / chat / MD 文件) 到 embeddings + vec_embeddings.
 import fs from 'fs/promises';
 import { embed, embedBatch } from './embedder.js';
-import { upsertEmbeddingRow, getEmbeddingsBySource, countEmbeddings } from './state-db.js';
+import db, { upsertEmbeddingRow, getEmbeddingsBySource, countEmbeddings } from './state-db.js';
 
 const MAX_CHUNK = 400;
 const OVERLAP = 50;
@@ -130,5 +130,77 @@ export async function indexAllSongs() {
     process.stdout.write(`\r[indexer] songs: ${added} added, ${skipped} skipped...   `);
   }
   process.stdout.write('\n');
+  return { added, skipped };
+}
+
+export async function indexFeedback(fb) {
+  // fb: { id, ts, song_title, song_artist, signal, context_json }
+  const source_id = `fb:${fb.id}`;
+  if (getEmbeddingsBySource('feedback', source_id).length) return false;
+  let reason = '';
+  try {
+    const ctx = fb.context_json ? JSON.parse(fb.context_json) : null;
+    reason = ctx?.reason || '';
+  } catch {}
+  const chunk_text = `[${fb.signal}] ${fb.song_title} / ${fb.song_artist}${reason ? ' — ' + reason : ''}`;
+  const vec = await embed(chunk_text);
+  upsertEmbeddingRow({
+    source_type: 'feedback',
+    source_id,
+    chunk_text,
+    meta: {
+      signal: fb.signal,
+      ts: fb.ts,
+      target_title: fb.song_title,
+      target_artist: fb.song_artist,
+      reason,
+    },
+    embedding: vec,
+  });
+  return true;
+}
+
+export async function indexChatTurn(turn) {
+  // turn: { id, ts, user_message, intent, dj_say, play_titles_json, ... }
+  const source_id = `turn:${turn.id}`;
+  if (getEmbeddingsBySource('chat_turn', source_id).length) return false;
+  let plays = '';
+  try {
+    const arr = turn.play_titles_json ? JSON.parse(turn.play_titles_json) : [];
+    plays = arr.map(p => p.title).join(', ');
+  } catch {}
+  const chunk_text = `[用户] ${turn.user_message} [DJ ${turn.intent || '?'}] ${turn.dj_say || ''}${plays ? ' 推:' + plays : ''}`;
+  const vec = await embed(chunk_text);
+  upsertEmbeddingRow({
+    source_type: 'chat_turn',
+    source_id,
+    chunk_text,
+    meta: {
+      intent: turn.intent,
+      ts: turn.ts,
+      queue_action: turn.queue_action,
+    },
+    embedding: vec,
+  });
+  return true;
+}
+
+export async function indexAllFeedback() {
+  const rows = db.prepare(`SELECT * FROM feedback ORDER BY ts ASC`).all();
+  let added = 0, skipped = 0;
+  for (const r of rows) {
+    const ok = await indexFeedback(r);
+    if (ok) added++; else skipped++;
+  }
+  return { added, skipped };
+}
+
+export async function indexAllChatTurns() {
+  const rows = db.prepare(`SELECT * FROM chat_turns ORDER BY ts ASC`).all();
+  let added = 0, skipped = 0;
+  for (const r of rows) {
+    const ok = await indexChatTurn(r);
+    if (ok) added++; else skipped++;
+  }
   return { added, skipped };
 }
