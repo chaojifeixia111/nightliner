@@ -6,18 +6,27 @@
 import { spawn } from 'child_process';
 import { logLlmCall } from './llm-logger.js';
 
-export async function callLlm({ prompt, model, trigger, jsonMode = false }) {
+export async function callLlm({ prompt, system, messages, model, trigger, jsonMode = false }) {
   const t0 = Date.now();
   let response = '';
   let error = null;
 
+  // Multi-turn path: 优先 messages,fallback 到 single prompt
+  const useMessages = Array.isArray(messages) && messages.length > 0;
+
   try {
     if (model.startsWith('claude-')) {
-      response = await callClaudeCli(prompt, model);
+      response = useMessages
+        ? await callClaudeCliMessages(system, messages, model)
+        : await callClaudeCli(prompt, model);
     } else if (model.startsWith('deepseek-')) {
-      response = await callDeepSeek(prompt, model, jsonMode);
+      response = useMessages
+        ? await callDeepSeekMessages(system, messages, model, jsonMode)
+        : await callDeepSeek(prompt, model, jsonMode);
     } else if (model.startsWith('qwen-')) {
-      response = await callQwen(prompt, model, jsonMode);
+      response = useMessages
+        ? await callQwenMessages(system, messages, model, jsonMode)
+        : await callQwen(prompt, model, jsonMode);
     } else {
       throw new Error(`Unknown model provider for: ${model}`);
     }
@@ -26,7 +35,9 @@ export async function callLlm({ prompt, model, trigger, jsonMode = false }) {
     throw e;
   } finally {
     await logLlmCall({
-      model, trigger, prompt, response,
+      model, trigger,
+      prompt: useMessages ? JSON.stringify({ system, messages }) : prompt,
+      response,
       duration_ms: Date.now() - t0,
       error,
     });
@@ -113,6 +124,67 @@ async function callQwen(prompt, model, jsonMode) {
   }
   const data = await r.json();
   return data.choices?.[0]?.message?.content || '';
+}
+
+// Multi-turn helpers (messages[] path)
+
+async function callDeepSeekMessages(system, messages, model, jsonMode) {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) throw new Error('DEEPSEEK_API_KEY not set');
+
+  const msgs = [];
+  if (system) msgs.push({ role: 'system', content: system });
+  msgs.push(...messages);
+
+  const body = {
+    model,
+    messages: msgs,
+    temperature: 0.7,
+    max_tokens: 8192,
+  };
+  if (jsonMode) body.response_format = { type: 'json_object' };
+
+  const r = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const text = await r.text().catch(() => '<no body>');
+    throw new Error(`DeepSeek ${r.status}: ${text}`);
+  }
+  const data = await r.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
+async function callQwenMessages(system, messages, model, jsonMode) {
+  const apiKey = process.env.DASHSCOPE_API_KEY;
+  if (!apiKey) throw new Error('DASHSCOPE_API_KEY not set');
+
+  const msgs = [];
+  if (system) msgs.push({ role: 'system', content: system });
+  msgs.push(...messages);
+
+  const body = { model, messages: msgs, temperature: 0.7 };
+  if (jsonMode) body.response_format = { type: 'json_object' };
+
+  const r = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`Qwen ${r.status}: ${await r.text().catch(() => '<no body>')}`);
+  const data = await r.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
+// claude CLI 不原生支持 messages,把它拼回 single prompt 后用现有路径
+async function callClaudeCliMessages(system, messages, model) {
+  let text = system ? system + '\n\n---\n\n' : '';
+  for (const m of messages) {
+    text += `[${m.role}]\n${m.content}\n\n`;
+  }
+  return callClaudeCli(text, model);
 }
 
 // 从 LLM 输出文本里提取 JSON(可能用 ```json ... ``` 包着,也可能纯 JSON)
