@@ -77,6 +77,17 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_feedback_ts ON feedback(ts);
     CREATE INDEX IF NOT EXISTS idx_chat_turns_ts ON chat_turns(ts);
 
+    CREATE TABLE IF NOT EXISTS embeddings (
+      id INTEGER PRIMARY KEY,
+      source_type TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      chunk_text TEXT NOT NULL,
+      meta_json TEXT,
+      ts INTEGER NOT NULL,
+      UNIQUE(source_type, source_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_embeddings_source ON embeddings(source_type, source_id);
+
     CREATE VIRTUAL TABLE IF NOT EXISTS vec_embeddings USING vec0(
       embedding_id INTEGER PRIMARY KEY,
       embedding FLOAT[1024]
@@ -197,6 +208,59 @@ export function feedbackStats() {
   const out = { play_events: playCount, chat_turns: turnsCount };
   for (const row of fb) out[row.signal] = row.count;
   return out;
+}
+
+// === RAG embeddings ===
+
+export function upsertEmbeddingRow({ source_type, source_id, chunk_text, meta, embedding }) {
+  const ts = Math.floor(Date.now() / 1000);
+  const tx = db.transaction(() => {
+    // 1. 主表 upsert
+    const result = db.prepare(`
+      INSERT INTO embeddings (source_type, source_id, chunk_text, meta_json, ts)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(source_type, source_id) DO UPDATE SET
+        chunk_text = excluded.chunk_text,
+        meta_json = excluded.meta_json,
+        ts = excluded.ts
+      RETURNING id
+    `).get(source_type, source_id, chunk_text, JSON.stringify(meta || {}), ts);
+    const id = result.id;
+
+    // 2. vec 表 upsert (先删再插,因为 vec0 不支持 ON CONFLICT)
+    // IMPORTANT: sqlite-vec vec0 requires BigInt for INTEGER primary key bind
+    const idBig = BigInt(id);
+    db.prepare(`DELETE FROM vec_embeddings WHERE embedding_id = ?`).run(idBig);
+    db.prepare(`INSERT INTO vec_embeddings(embedding_id, embedding) VALUES (?, ?)`)
+      .run(idBig, Buffer.from(embedding.buffer));
+
+    return id;
+  });
+  return tx();
+}
+
+export function getEmbeddingsBySource(source_type, source_id) {
+  return db.prepare(`
+    SELECT * FROM embeddings WHERE source_type = ? AND source_id = ?
+  `).all(source_type, source_id);
+}
+
+export function deleteEmbeddingsBySource(source_type, source_id) {
+  const tx = db.transaction(() => {
+    const rows = db.prepare(`SELECT id FROM embeddings WHERE source_type = ? AND source_id = ?`).all(source_type, source_id);
+    for (const r of rows) {
+      db.prepare(`DELETE FROM vec_embeddings WHERE embedding_id = ?`).run(BigInt(r.id));
+    }
+    db.prepare(`DELETE FROM embeddings WHERE source_type = ? AND source_id = ?`).run(source_type, source_id);
+  });
+  tx();
+}
+
+export function countEmbeddings(source_type) {
+  if (source_type) {
+    return db.prepare(`SELECT COUNT(*) as c FROM embeddings WHERE source_type = ?`).get(source_type).c;
+  }
+  return db.prepare(`SELECT COUNT(*) as c FROM embeddings`).get().c;
 }
 
 export default db;
