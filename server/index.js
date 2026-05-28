@@ -11,6 +11,7 @@ import { recordFeedback, recordPlay, recordQueue, recordChatTurn, recentChatTurn
 import { recommendSongs, personalFm } from './ncm-client.js';
 import { warmup } from './embedder.js';
 import { indexAllSongs, indexAllFeedback, indexAllChatTurns, indexMdFile } from './indexer.js';
+import { enforceSourcePoolBudget, checkReasonHallucination } from './budget-enforcer.js';
 
 const config = yaml.parse(await fs.readFile('config.yaml', 'utf8'));
 const PORT = config.server.port;
@@ -158,6 +159,51 @@ app.post('/api/chat', async (req, res) => {
     if (intent === 'recommend') {
       // Resolve play list → NCM URLs
       const plays = Array.isArray(parsed.play) ? parsed.play : [];
+
+      // === Budget enforcement (T17) ===
+      const exp = tuning.exploration_pct;
+      const target = {
+        lib: 100 - exp,
+        rec: Math.round(exp * 0.7),
+        wild: exp - Math.round(exp * 0.7),
+      };
+      let budgetCheck = enforceSourcePoolBudget(plays, target);
+      if (!budgetCheck.ok) {
+        console.log(`[chat] budget deviation ${(budgetCheck.deviation * 100).toFixed(0)}%, retrying with hint`);
+        const retryMessages = [...messages, {
+          role: 'assistant',
+          content: '```json\n' + JSON.stringify({ intent: 'recommend', say: parsed.say || '', play: parsed.play || [] }, null, 2) + '\n```',
+        }, {
+          role: 'user',
+          content: `你上一次的回答 source_pool 比例不对. ${budgetCheck.hint} 重新输出 JSON.`,
+        }];
+        try {
+          const raw2 = await callLlm({ system, messages: retryMessages, model: config.models.chat_mode, trigger: 'chat-retry' });
+          const parsed2 = extractJson(raw2);
+          if (Array.isArray(parsed2.play) && parsed2.play.length) {
+            plays.length = 0;
+            plays.push(...parsed2.play);
+            parsed.play = parsed2.play;
+            if (parsed2.say) parsed.say = parsed2.say;
+            console.log(`[chat] retry succeeded, new plays: ${plays.length}`);
+          } else {
+            console.warn(`[chat] retry returned no plays, keeping original`);
+          }
+        } catch (e) {
+          console.warn(`[chat] retry failed: ${e.message}, keeping original`);
+        }
+      }
+
+      // === Hallucination check (T17, best effort, only log + mask reason) ===
+      const evidenceStr = messages[messages.length - 1]?.content || '';
+      const hallu = checkReasonHallucination(plays, evidenceStr);
+      if (hallu.length) {
+        console.warn(`[chat] hallucination suspects in ${hallu.length} reasons: ${hallu.map(h => `play[${h.play_idx}]: ${h.suspect_terms.join(',')}`).join('; ')}`);
+        for (const h of hallu) {
+          plays[h.play_idx].reason = `(reason 含未验证细节,已隐藏) ${plays[h.play_idx].title}`;
+        }
+      }
+
       const resolved = await resolvePlayList(plays);
       const playable = resolved.filter(s => s.found);
 
