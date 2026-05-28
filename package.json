@@ -11,7 +11,10 @@
     "ncm:login": "node scripts/ncm-login-qr.js",
     "ncm:fetch": "node scripts/ncm-fetch-playlists.js",
     "cold-start": "node --env-file=.env scripts/cold-start.js",
-    "chat": "node --env-file=.env scripts/chat-once.js"
+    "chat": "node --env-file=.env scripts/chat-once.js",
+    "test": "node --env-file=.env --test tests/",
+    "test:embed": "node --env-file=.env scripts/test-embed.js",
+    "index:all": "node --env-file=.env scripts/index-all.js"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
