@@ -26,3 +26,18 @@ export async function embed(text) {
 export async function warmup() {
   await getExtractor();
 }
+
+export async function embedBatch(texts) {
+  if (!texts.length) return [];
+  const e = await getExtractor();
+  // transformers.js 接受数组输入,内部 batch
+  const out = await e(texts, { pooling: 'cls', normalize: true });
+  // out.dims = [N, 1024]
+  const N = out.dims[0];
+  const D = out.dims[1];
+  const result = [];
+  for (let i = 0; i < N; i++) {
+    result.push(new Float32Array(out.data.slice(i * D, (i + 1) * D)));
+  }
+  return result;
+}
