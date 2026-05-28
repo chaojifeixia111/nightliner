@@ -133,6 +133,9 @@ function fmtChatHistory(turns) {
   }).join('\n\n');
 }
 
+/**
+ * @deprecated Use buildChatMessages instead. Kept for cold-start / chat-once scripts.
+ */
 export async function buildChatPrompt({ userMessage, currentQueue, n = 5, exploration_pct = 30, recommendPool = [] }) {
   const template = await fs.readFile(TEMPLATE_PATH, 'utf8');
   const djPersona = await readOrEmpty('user/dj-persona.md');
