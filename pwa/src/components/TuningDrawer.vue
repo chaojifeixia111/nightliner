@@ -10,7 +10,7 @@
         <div class="slider-group">
           <label class="slider-label">
             <span>探索档位</span>
-            <span class="val">{{ currentMode.name }} · {{ currentMode.en }}</span>
+            <span class="val">{{ currentMode.en }}</span>
           </label>
           <input
             type="range"
@@ -19,9 +19,8 @@
             class="slider"
           />
           <div class="ticks">
-            <span v-for="m in MODES" :key="m.value" :class="{ on: m.value === currentMode.value }">{{ m.name }}</span>
+            <span v-for="m in MODES" :key="m.value" :class="{ on: m.value === currentMode.value }">{{ m.en }}</span>
           </div>
-          <div class="hint">{{ currentMode.desc }}</div>
         </div>
 
         <div class="slider-group">
@@ -88,11 +87,11 @@ watch(local, (val) => {
 
 // 与后端 exploration-modes.js 对齐的 5 个命名档位(名字 + 一句话描述)
 const MODES = [
-  { value: 0, name: '舒适区', en: 'Comfort', desc: '只放你最爱、最常听的' },
-  { value: 25, name: '偏熟悉', en: 'Cozy', desc: '收藏里没常听的 + 一点同艺人深挖' },
-  { value: 50, name: '平衡', en: 'Balanced', desc: '一半熟，一半新' },
-  { value: 75, name: '偏探索', en: 'Venture', desc: '大半没听过的，锚在你口味上' },
-  { value: 100, name: '狂野', en: 'Wild', desc: '几乎全新，只留一点底色' },
+  { value: 0, name: '舒适区', en: 'Comfort' },
+  { value: 25, name: '偏熟悉', en: 'Cozy' },
+  { value: 50, name: '平衡', en: 'Balanced' },
+  { value: 75, name: '偏探索', en: 'Venture' },
+  { value: 100, name: '狂野', en: 'Wild' },
 ];
 function nearestMode(v) {
   return MODES.reduce((b, m) => Math.abs(m.value - v) < Math.abs(b.value - v) ? m : b, MODES[0]);
