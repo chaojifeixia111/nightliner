@@ -159,14 +159,22 @@ function updateClock() {
 }
 
 let clockTimer;
-onMounted(() => { updateClock(); clockTimer = setInterval(updateClock, 1000); });
+onMounted(() => { updateClock(); clockTimer = setInterval(updateClock, 1000); applyVolume(); });
 onUnmounted(() => clearInterval(clockTimer));
 
 // Audio state
 const audio = ref(null);
 const paused = ref(false);
 const muted = ref(false);
-const volume = ref(80);
+// 音量:记住用户手动调过的值(localStorage),首次默认 33(别一打开就吵)
+const VOLUME_KEY = 'nl_volume';
+function loadVolume() {
+  const raw = localStorage.getItem(VOLUME_KEY);
+  if (raw === null || raw === '') return 33;   // 没存过 → 默认 33(注意 Number(null)===0,必须先判空)
+  const v = Number(raw);
+  return Number.isFinite(v) && v >= 0 && v <= 100 ? v : 33;
+}
+const volume = ref(loadVolume());
 const currentSec = ref(0);
 const durationSec = ref(0);
 const progressPct = ref(0);
@@ -202,6 +210,7 @@ function onTimeUpdate() {
 
 function onMeta() {
   if (audio.value) durationSec.value = audio.value.duration || 0;
+  applyVolume();   // 每首歌加载时把音量落到元素上(autoplay 默认是 100%)
 }
 
 function togglePlay() {
@@ -216,9 +225,13 @@ function toggleMute() {
   audio.value.muted = muted.value;
 }
 
+function applyVolume() {
+  if (audio.value) audio.value.volume = volume.value / 100;
+}
+
 function onVolumeChange() {
-  if (!audio.value) return;
-  audio.value.volume = volume.value / 100;
+  applyVolume();
+  try { localStorage.setItem(VOLUME_KEY, String(volume.value)); } catch {}
 }
 
 function onEnded() {
