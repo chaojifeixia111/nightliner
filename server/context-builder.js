@@ -231,9 +231,16 @@ export async function buildChatMessages({
     if (now && typeof now.ncm_id === 'number') {
       seeds.push({ ncm_id: now.ncm_id, name: now.title, artist: now.artist });
     }
-    for (const s of retrieved.songs) {
+    // 随机抽种子(而非每次都取 RAG 前几名)→ 每次相邻探索命中不同的近邻,
+    // 避免反复推同几首。retrieved.songs 对同一 query 是确定的,这里靠 shuffle 引入变化。
+    const seedPool = retrieved.songs.filter(s => typeof s.ncm_id === 'number');
+    for (let i = seedPool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [seedPool[i], seedPool[j]] = [seedPool[j], seedPool[i]];
+    }
+    for (const s of seedPool) {
       if (seeds.length >= 5) break;
-      if (typeof s.ncm_id === 'number') seeds.push({ ncm_id: s.ncm_id, name: s.name, artist: s.artist });
+      seeds.push({ ncm_id: s.ncm_id, name: s.name, artist: s.artist });
     }
     if (seeds.length) {
       const excludeKeys = new Set();
@@ -267,7 +274,7 @@ export async function buildChatMessages({
     .replace('{{LIBRARY_SLICE}}', fmtSongs(retrieved.songs))
     .replace('{{RECOMMEND_POOL}}', resolvedPool.length
       ? resolvedPool.slice(0, 20).map((s, i) => `${i + 1}. ${s.name} / ${s.artist}`).join('\n')
-      : '(暂无)')
+      : '(今天的每日推荐没拉到 —— 可能 cookie 过期或本地 NCM 服务未启动;本轮没有 recommend 池,别凭空编 recommend 歌)')
     .replace('{{EXPLORE_POOL}}', fmtExplorePool(explorePool))
     .replace('{{FEEDBACK_SLICE}}', fmtFeedbackRag(retrieved.feedback))
     .replace('{{TASTE_SLICE}}', fmtSnippets(retrieved.taste_snippets))
