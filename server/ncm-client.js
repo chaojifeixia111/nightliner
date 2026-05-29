@@ -83,6 +83,11 @@ export async function simiSong(id) {
   return ncmRequest('/simi/song', { id });
 }
 
+// 某艺人的热门单曲(/artist/top/song 返回约 50 首)—— 用于「同艺人深挖」候选
+export async function artistTopSongs(id) {
+  return ncmRequest('/artist/top/song', { id });
+}
+
 export async function personalFm() {
   return ncmRequest('/personal_fm');
 }

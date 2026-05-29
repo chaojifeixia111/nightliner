@@ -75,6 +75,28 @@ async function buildLibrarySlice() {
   return _libraryCache;
 }
 
+// 全量 library 去重键(snapshot + Apple Music)—— 把你已收藏的歌从 explore/深挖候选里排除,
+// 这样 wildcard 永远是「新东西」,不会把你已有/已标记喜欢的那首又推回来。
+let _libraryKeysCache = null;
+async function libraryKeys() {
+  if (_libraryKeysCache) return _libraryKeysCache;
+  const keys = new Set();
+  try {
+    const snapshot = JSON.parse(await fs.readFile(SNAPSHOT_PATH, 'utf8'));
+    for (const pl of Object.values(snapshot.playlists || {})) {
+      for (const song of (pl.songs || [])) keys.add(songKey(song.name, song.artists));
+    }
+  } catch {}
+  try {
+    const md = await fs.readFile(APPLE_MD_PATH, 'utf8');
+    const re = /^\s*\d+\.\s+(.+?)\s+\/\s+(.+?)\s*$/gm;
+    let m;
+    while ((m = re.exec(md)) !== null) keys.add(songKey(m[1].trim(), m[2].trim()));
+  } catch {}
+  _libraryKeysCache = keys;
+  return _libraryKeysCache;
+}
+
 function fmtPlays(plays) {
   if (!plays.length) return '(无最近播放,这是首次会话)';
   return plays.map(p => {
@@ -190,8 +212,10 @@ function fmtSnippets(arr, empty = '(无相关召回)') {
 function fmtExplorePool(cands) {
   if (!cands || !cands.length) return '(无 explore 候选 — 当前没合适的相似歌种子)';
   return cands.map((c, i) => {
-    const via = c.via?.length ? `(灵感来自 ${c.via.map(v => `«${v}»`).join('、')})` : '';
-    return `${i + 1}. ${c.name} / ${c.artist} ${via}`.trim();
+    let tag = '';
+    if (c.kind === 'deepcut') tag = `(${c.via.join('、')} 的另一首,你大概率没收藏过 —— 同艺人深挖)`;
+    else if (c.via?.length) tag = `(灵感来自 ${c.via.map(v => `«${v}»`).join('、')})`;
+    return `${i + 1}. ${c.name} / ${c.artist} ${tag}`.trim();
   }).join('\n');
 }
 
@@ -243,7 +267,7 @@ export async function buildChatMessages({
       seeds.push({ ncm_id: s.ncm_id, name: s.name, artist: s.artist });
     }
     if (seeds.length) {
-      const excludeKeys = new Set();
+      const excludeKeys = new Set(await libraryKeys());  // 你已收藏的全部排除 → explore/深挖只给新东西
       for (const a of antiList()) excludeKeys.add(songKey(a.song_title, a.song_artist));
       for (const c of activeCooldowns()) excludeKeys.add(songKey(c.song_title, c.song_artist));
       for (const p of recentPlays(20)) excludeKeys.add(songKey(p.title, p.artist));
@@ -273,7 +297,7 @@ export async function buildChatMessages({
     .replace('{{N}}', String(n))
     .replace('{{LIBRARY_SLICE}}', fmtSongs(retrieved.songs))
     .replace('{{RECOMMEND_POOL}}', resolvedPool.length
-      ? resolvedPool.slice(0, 20).map((s, i) => `${i + 1}. ${s.name} / ${s.artist}`).join('\n')
+      ? [...resolvedPool].sort(() => Math.random() - 0.5).slice(0, 20).map((s, i) => `${i + 1}. ${s.name} / ${s.artist}`).join('\n')
       : '(今天的每日推荐没拉到 —— 可能 cookie 过期或本地 NCM 服务未启动;本轮没有 recommend 池,别凭空编 recommend 歌)')
     .replace('{{EXPLORE_POOL}}', fmtExplorePool(explorePool))
     .replace('{{FEEDBACK_SLICE}}', fmtFeedbackRag(retrieved.feedback))

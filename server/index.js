@@ -65,24 +65,24 @@ async function getRecommendPool() {
   if (Date.now() - recommendCache.ts < THIRTY_MIN && recommendCache.songs.length) {
     return recommendCache.songs;
   }
+  const byId = new Map();
+  const add = (s) => {
+    if (!s || s.id == null || !s.name) return;
+    if (byId.has(s.id)) return;
+    byId.set(s.id, { name: s.name, artist: (s.ar || s.artists || []).map(a => a.name).join(' / '), ncm_id: s.id });
+  };
   try {
-    const data = await recommendSongs(20);
-    const songs = (data?.data?.dailySongs || []).map(s => ({
-      name: s.name,
-      artist: (s.ar || []).map(a => a.name).join(' / '),
-    }));
+    const data = await recommendSongs(30);
+    for (const s of (data?.data?.dailySongs || [])) add(s);
+    // 叠加 personal_fm:每次返回不同的几首 → 给推荐池注入会轮换的新鲜血液(抓两次拿更多)
+    const fmResults = await Promise.allSettled([personalFm(), personalFm()]);
+    for (const r of fmResults) {
+      if (r.status === 'fulfilled') for (const s of (r.value?.data || [])) add(s);
+    }
+    const songs = [...byId.values()];
     if (songs.length) {
       recommendCache = { ts: Date.now(), songs };
-      console.log(`[recommend] pool refreshed: ${songs.length} songs`);
-    } else {
-      // fallback to personal FM
-      const fm = await personalFm();
-      const fmSongs = (fm?.data || []).map(s => ({
-        name: s.name,
-        artist: (s.ar || s.artists || []).map(a => a.name).join(' / '),
-      }));
-      recommendCache = { ts: Date.now(), songs: fmSongs };
-      console.log(`[recommend] pool from personalFm: ${fmSongs.length} songs`);
+      console.log(`[recommend] pool refreshed: ${songs.length} songs (daily + fm)`);
     }
   } catch (e) {
     console.warn('[recommend] pool fetch failed:', e.message);

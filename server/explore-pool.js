@@ -1,7 +1,7 @@
 // server/explore-pool.js
 // 相似歌曲探索池 —— 网易云 /simi/song 只作「候选生成」层,Agent 自己做去重/过滤/打散/重排。
 // 绝不照搬网易云的原始排序或 Top-K(见 memory: agent-agency-over-external-recs)。
-import { simiSong } from './ncm-client.js';
+import { simiSong, songDetail, artistTopSongs } from './ncm-client.js';
 
 // 归一化歌名/艺人,用于去重和排除集匹配
 function norm(s) {
@@ -44,6 +44,8 @@ export async function buildExplorePool({
   excludeKeys = new Set(),
   perSeedCap = 2,
   limit = 12,
+  deepCutArtists = 2,
+  deepCutPerArtist = 3,
 } = {}) {
   // 只保留带真实数字 id 的种子(am: 开头的 Apple Music 虚拟 id 查不了 simi),并去重
   const uniqSeeds = [];
@@ -82,12 +84,48 @@ export async function buildExplorePool({
     }
   });
 
-  // 重排信号 = 多种子共识 (via.size) + 随机噪声,绝非网易云原序 → 随机采样取 limit
+  // 「同艺人深挖」:对种子艺人补几首他们的其它热门歌(你大概率没收藏过)—— 直接服务
+  // 「同一个喜欢的音乐人,推点没听过的」。excludeKeys 已含 library,会滤掉你已有的。
+  try {
+    const detail = await songDetail(uniqSeeds.map(s => s.ncm_id));
+    const artistOf = new Map(); // seed ncm_id → { id, name } (主艺人)
+    for (const ds of (detail?.songs || [])) {
+      const a = (ds.ar || ds.artists || [])[0];
+      if (a?.id) artistOf.set(ds.id, { id: a.id, name: a.name });
+    }
+    const chosen = [];
+    const seenArtist = new Set();
+    for (const s of uniqSeeds) {            // uniqSeeds 顺序 = 上游随机抽样的种子序
+      const a = artistOf.get(s.ncm_id);
+      if (!a || seenArtist.has(a.id)) continue;
+      seenArtist.add(a.id);
+      chosen.push(a);
+      if (chosen.length >= deepCutArtists) break;
+    }
+    const tops = await Promise.allSettled(chosen.map(a => artistTopSongs(a.id)));
+    chosen.forEach((a, i) => {
+      const r = tops[i];
+      if (r.status !== 'fulfilled') return;
+      let taken = 0;
+      for (const raw of shuffle(r.value?.songs || [])) {  // 丢弃网易云原序
+        if (taken >= deepCutPerArtist) break;
+        const c = normalizeSimi(raw);
+        if (typeof c.ncm_id !== 'number' || !c.name) continue;
+        const k = songKey(c.name, c.artist);
+        if (exclude.has(k)) continue;
+        if (byKey.has(k)) { byKey.get(k).via.add(a.name); continue; }
+        byKey.set(k, { name: c.name, artist: c.artist, ncm_id: c.ncm_id, via: new Set([a.name]), kind: 'deepcut' });
+        taken++;
+      }
+    });
+  } catch { /* 深挖可选,失败忽略 */ }
+
+  // 重排信号 = 多种子共识 (via.size) + 深挖轻微加权 + 随机噪声,绝非网易云原序
   return [...byKey.values()]
     .map(c => ({
       name: c.name, artist: c.artist, ncm_id: c.ncm_id,
-      via: [...c.via],
-      _w: c.via.size + Math.random(),
+      via: [...c.via], kind: c.kind || 'simi',
+      _w: c.via.size + (c.kind === 'deepcut' ? 0.7 : 0) + Math.random(),
     }))
     .sort((a, b) => b._w - a._w)
     .slice(0, limit)
