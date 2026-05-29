@@ -1,5 +1,7 @@
 # Nightliner v0.4 · Windows MVP 设计差分稿
 
+> ⚠️ **历史文档(2026-05-08 转向决策)。** 当前真实实现见 [nightliner-design-v0.5.md](../../../nightliner-design-v0.5.md)。本差分稿早于 RAG / 流式 / 探索档位 / 方向硬约束 / deepseek 等改动——其中"模型用 Claude/Opus"、"不做调音台/Settings"、"取歌 70/20/10"均已过时。保留作为转向决策留痕。
+
 > **基于**:[v0.3 完整设计](../../../nightliner-design-v0.3.md) + 5 轮 brainstorming 决策
 > **日期**:2026-05-08
 > **状态**:待用户审核;审完进入 writing-plans

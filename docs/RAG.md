@@ -4,7 +4,7 @@
 
 ## 一句话
 
-每次 chat：用户消息 → BGE-M3 embed → sqlite-vec 多路 top-K → 拼成 system+messages → DeepSeek 多轮。**prompt 从 45KB 砍到 ~12KB，无幻觉，强制探索比例。**
+每次 chat：用户消息 → BGE-M3 embed → sqlite-vec 多路 top-K → 拼成 system+messages → DeepSeek 流式。**prompt 从 45KB 砍到 ~12KB。** 本手册只讲 RAG(embedding/检索/索引)那一层;探索档位 / 方向硬约束 / 反馈衰减等推荐管线见 [nightliner-design-v0.5.md](../nightliner-design-v0.5.md) §三。
 
 ## 系统启动时发生了什么
 
@@ -30,18 +30,14 @@ user msg → embed (~30ms)
         ↓
 buildChatMessages → {system: ~3KB, messages: [u, a, u, a, ..., u 当前轮]}
         ↓
-DeepSeek API (multi-turn) → JSON 输出
+DeepSeek API (SSE 流式) → prose(say 逐字推 WS) + ```json``` 块
         ↓
 intent === 'recommend':
-  enforceSourcePoolBudget(plays, target)
-    ↓ 偏差 > 10%
-  retry once with hint → 新 plays
+  repairFamiliarNew(plays, meta)   ← 方向感知 + familiar/new 硬对齐;确定性换槽,不重试
         ↓
-  checkReasonHallucination(plays, evidence)
-    ↓ 命中 evidence 外细节
-  mask reason
+  checkReasonHallucination(plays, evidence) → 命中 evidence 外细节则遮蔽 reason
         ↓
-  resolvePlayList (NCM) → broadcast queue
+  resolvePlayList (NCM cloudsearch → 原唱 → songUrl) → broadcast queue
 ```
 
 ## 手动操作
@@ -80,7 +76,7 @@ vec_embeddings(embedding_id INTEGER PRIMARY KEY, embedding FLOAT[1024])
 ## 调参
 
 `config.yaml > rag.retrieval.*_top_k` — 召回数量, 越大 prompt 越长但召回越全
-`config.yaml > rag.budget_enforcement.deviation_threshold` — 探索系数容忍, 默认 10%
+探索比例 / 方向 **不在 config** — 看 `server/exploration-modes.js`(档位配方)+ `server/direction.js`(方向)。`rag.budget_enforcement.*` 是 **legacy**,已被 `align-batch.js` 的确定性 `repairFamiliarNew` 取代,不再读取。
 
 ## 性能预算 (实测)
 
@@ -89,9 +85,9 @@ vec_embeddings(embedding_id INTEGER PRIMARY KEY, embedding FLOAT[1024])
 | user msg embed | ~30ms |
 | 多路 retrieve (7 类) | ~50ms |
 | build messages | ~10ms |
-| DeepSeek V4-flash (12KB prompt, 11 messages) | 8-30s |
-| (条件) budget retry | +5-10s |
-| NCM resolve + queue | ~2s |
+| DeepSeek V4-flash (12KB prompt, ~11 messages, SSE 流式) | 8-30s(say 首字更快) |
+| repairFamiliarNew(确定性对齐, 无重试) | ~0ms |
+| NCM resolve + queue(cloudsearch + songUrl 并行) | ~2s |
 | **端到端中位** | **~12-25s** |
 
 启动开销：
@@ -117,11 +113,15 @@ server/
   vec-store.js          searchSimilar({embedding, source_type, top_k})
   indexer.js            chunkMarkdownByH2 + indexSong/indexFeedback/indexChatTurn/indexMdFile + indexAll*
   retriever.js          retrieveContext({userMessage, recentTurns, budgets})
-  context-builder.js    buildChatMessages({...}) → {system, messages[]}
-  llm-adapter.js        callLlm({system, messages, ...}) 多路 provider 分发
-  budget-enforcer.js    enforceSourcePoolBudget + checkReasonHallucination
-  state-db.js           +sqlite-vec load, +embeddings 表 + CRUD helpers
-  index.js              /api/chat 用 buildChatMessages, 启动时 warmup+indexAll
+  context-builder.js    buildChatMessages({...}) → {system, messages[], meta};档位+方向+池子+降权 接线
+  exploration-modes.js  5 档命名模式表 + modeForValue + familiarTarget
+  direction.js          方向检测/匹配/延续(语种以歌名脚本判定)
+  align-batch.js        repairFamiliarNew:方向感知 + familiar/new 硬对齐(取代旧 budget retry)
+  explore-pool.js       buildExplorePool:simi 近邻 + 同艺人深挖
+  llm-adapter.js        callLlm / callLlmStream(SSE 流式)/ splitSayAndJson;多 provider 分发
+  budget-enforcer.js    checkReasonHallucination(仍用);enforceSourcePoolBudget(legacy,已不在 chat 流程)
+  state-db.js           +sqlite-vec load, +embeddings 表 + CRUD;skipStats/staleLoves(反馈衰减)
+  index.js              /api/chat 用 buildChatMessages + repairFamiliarNew;会话方向态;启动 warmup+indexAll
 
 prompts/
   system.md             DJ 人格 + 约束 (~3KB, prefix-cache 友好)

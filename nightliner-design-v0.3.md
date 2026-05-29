@@ -1,5 +1,7 @@
 # Nightliner · 夜线电台 设计文档 v0.3
 
+> ⚠️ **历史文档(原始愿景)。** 当前真实实现见 [nightliner-design-v0.5.md](nightliner-design-v0.5.md)。本文描述的 macOS + Apple Music(AppleScript)+ MediaRemote daemon + Claude + 周度 consolidation 等多数**未落地**(实际已转 Windows + 网易云直链 + deepseek + RAG)。保留作为北极星与设计推理留痕。
+
 > **用途**:直接交付 Claude Code 启动开发使用。
 > **基于**:v0.1(初始架构对话)+ v0.2(CC 草案)+ v0.3 多轮讨论(Apple Music 协调层、信号采集层、动态 queue、记忆考古涌现式生成)。
 > **风格约束**:完全私人订制,所有设计倾向"为 Elliot 一人服务",不考虑通用化、多用户、产品化包装。
