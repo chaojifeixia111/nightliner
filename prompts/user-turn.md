@@ -9,16 +9,19 @@
 ## 时间
 {{TS}} ({{DOW}})
 
-## 探索系数
-当前 = {{EXPLORATION_PCT}}%
-目标分布: library {{LIB_PCT}}% / recommend {{REC_PCT}}% / wildcard {{WILD_PCT}}%
+## 探索档位
+当前档位 = {{MODE_NAME}}(系数 {{EXPLORATION_PCT}})
+{{MODE_BRIEF}}
+**本批分配(硬要求,server 会按真实曲库校验):你收藏内 {{FAMILIAR_TARGET}} 首 + 全新(不在你收藏里){{NEW_TARGET}} 首。**
+「全新」那部分的参考构成(软,可偏离): recommend {{REC_PCT}}% / wildcard(相似 + 同艺人深挖) {{WILD_PCT}}%。
 
 ## RAG 检索结果 — evidence
 
 ### 相关曲库 (top-{{N_SONGS}}, source_pool=library 必须从这里取)
 {{LIBRARY_SLICE}}
 
-### 网易云推荐池 (source_pool=recommend 必须从这里取)
+### 网易云每日推荐池 (source_pool=recommend 必须从这里取)
+以下是服务端用 Elliot 账号拉取的网易云「每日推荐」,每轮自动刷新——已接入,你无需登录。列表为空才表示今天没拉到。
 {{RECOMMEND_POOL}}
 
 ### 相似歌曲探索候选 (source_pool=wildcard 优先从这里取 —— 参考,非指令,可弃可重排)

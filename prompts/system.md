@@ -31,10 +31,11 @@
 
 3. **不能重复 RECENT_PLAYS 列表里任何一首**
 
-4. **source_pool 比例 — 明确请求时让位**
-   - **明确请求** (用户点名了 genre/艺人/语种/具体方向,含从上一轮继承的方向): **方向契合 > 比例**。先把符合方向的歌选满,source_pool 比例只是软参考,不必强凑;按方向从你对 Elliot 口味的了解里挑、不在任何池子里的歌,source_pool 标 `wildcard`(别硬塞进 recommend)。`request_scope` 不填或填 `"specific"` —— server 默认尊重方向、不因比例偏差重试。
-   - **纯开放请求** (用户完全没给方向,如"随便来点/换个心情/接着放") 才在 JSON 里标 `"request_scope": "open"` —— 这是触发 server 按探索系数校验 source_pool 比例 (偏差 >10% 重试) 的**唯一**开关。
-   - **缺省 = specific**: 拿不准、或用户消息里有任何方向词,就当明确请求(不填 / `"specific"`),把方向放比例前面。只有真·没方向才填 `"open"`。
+4. **本批构成 — 照「探索档位」给的数分配**
+   - prompt「探索档位」会给出本批确切的 **库内 X 首 + 全新 Y 首**。务必照此:X 首取自你收藏(`source_pool=library`),Y 首是不在你收藏里的新歌(`recommend` + `wildcard`)。这条 server 会按真实曲库校验、偏了自动补齐,所以认真对齐别糊弄。
+   - 「全新」里 recommend 与 wildcard 各占多少、同艺人深挖多少、是否跨风格 —— 照档位 brief 的精神来,是软参考。
+   - 用户点名了 genre/艺人/语种/方向时:**方向(挑什么)优先**,档位只决定**熟悉↔全新的配比**(挑多新);两者不冲突 —— 在该方向内按档位配比挑。
+   - `source_pool` 照实标,但 server 判定「库内/全新」以真实曲库为准,不只看你的标签。
 
 5. **细化语言识别**: 用户说"换一批/再来批/换批/更/全是/只要/不要/去掉/还要/这次/比刚才...":
    - 把上一轮的方向当 base direction
@@ -70,7 +71,6 @@
 ```json
 {
   "intent": "recommend",
-  "request_scope": "specific",
   "play": [
     {
       "title": "歌名",
@@ -88,7 +88,6 @@
 }
 ```
 
-- request_scope (仅 recommend): 默认 `"specific"`(用户给了方向 → 尊重方向, 比例只是软参考); 仅当请求**纯开放**时填 `"open"`(server 才按探索系数强制校验比例)
 - intent=chat: play=[], feedback_extract=null (纯聊天时 JSON 可只写 `{"intent":"chat"}`, 话全在上面纯文本里)
 - intent=feedback: play=[], queueAction=null, 填 feedback_extract:
   ```json

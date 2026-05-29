@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import db, { recentPlays, recentFeedback, antiList, activeCooldowns, recentChatTurns } from './state-db.js';
 import { retrieveContext } from './retriever.js';
 import { buildExplorePool, songKey } from './explore-pool.js';
+import { modeForValue, familiarTarget } from './exploration-modes.js';
 
 const TEMPLATE_PATH = 'prompts/chat-mode.md';
 const SNAPSHOT_PATH = 'data/netease-snapshot.json';
@@ -243,9 +244,14 @@ export async function buildChatMessages({
 
   const dt = new Date();
   const dow = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][dt.getDay()];
-  const libPct = 100 - exploration_pct;
-  const recPct = Math.round(exploration_pct * 0.7);
-  const wildPct = exploration_pct - recPct;
+  // 探索系数 → 命名档位(每档一个明确配方)。池子比例直接来自档位,不再线性推导。
+  const mode = modeForValue(exploration_pct);
+  const libPct = mode.lib;
+  const recPct = mode.rec;
+  const wildPct = mode.wild;
+  const famTarget = familiarTarget(mode, n);   // 本批硬对齐:库内应有几首
+  const newTarget = n - famTarget;             // 其余为全新(不在你收藏里)
+  const libKeys = await libraryKeys();         // 复用:既给 explore 排除,也给 server 校验
 
   // wildcard 桶 = 相似歌探索池。只在有 wildcard 配额时才拉(exp=0 时跳过,省一次往返)。
   // 种子:now-playing + RAG 召回的曲库歌(都带数字 ncm_id 且贴合当前语境)。
@@ -267,7 +273,7 @@ export async function buildChatMessages({
       seeds.push({ ncm_id: s.ncm_id, name: s.name, artist: s.artist });
     }
     if (seeds.length) {
-      const excludeKeys = new Set(await libraryKeys());  // 你已收藏的全部排除 → explore/深挖只给新东西
+      const excludeKeys = new Set(libKeys);  // 你已收藏的全部排除 → explore/深挖只给新东西
       for (const a of antiList()) excludeKeys.add(songKey(a.song_title, a.song_artist));
       for (const c of activeCooldowns()) excludeKeys.add(songKey(c.song_title, c.song_artist));
       for (const p of recentPlays(20)) excludeKeys.add(songKey(p.title, p.artist));
@@ -276,7 +282,7 @@ export async function buildChatMessages({
           excludeKeys.add(songKey(f.song_title, f.song_artist));
         }
       }
-      explorePool = await buildExplorePool({ seeds, excludeKeys, perSeedCap: 2, limit: 12 })
+      explorePool = await buildExplorePool({ seeds, excludeKeys, perSeedCap: mode.perSeedCap, limit: 12, deepCutArtists: mode.deepCutArtists })
         .catch(e => { console.warn('[explore] pool failed:', e.message); return []; });
     }
   }
@@ -290,6 +296,10 @@ export async function buildChatMessages({
     .replace('{{TS}}', dt.toISOString())
     .replace('{{DOW}}', dow)
     .replace('{{EXPLORATION_PCT}}', String(exploration_pct))
+    .replace('{{MODE_NAME}}', `${mode.name} / ${mode.en}`)
+    .replace('{{MODE_BRIEF}}', mode.brief)
+    .replace('{{FAMILIAR_TARGET}}', String(famTarget))
+    .replace('{{NEW_TARGET}}', String(newTarget))
     .replace('{{LIB_PCT}}', String(libPct))
     .replace('{{REC_PCT}}', String(recPct))
     .replace('{{WILD_PCT}}', String(wildPct))
@@ -331,5 +341,8 @@ export async function buildChatMessages({
   }
   messages.push({ role: 'user', content: userContent });
 
-  return { system, messages };
+  return {
+    system, messages,
+    meta: { mode, n, famTarget, newTarget, libKeys, librarySlice: retrieved.songs, explorePool, recommendPool: resolvedPool },
+  };
 }

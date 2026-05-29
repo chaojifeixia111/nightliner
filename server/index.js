@@ -6,13 +6,14 @@ import yaml from 'yaml';
 import fs from 'fs/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { buildChatMessages } from './context-builder.js';
+import { repairFamiliarNew } from './align-batch.js';
 import { callLlm, extractJson, callLlmStream } from './llm-adapter.js';
 import { resolvePlayList } from './playback-coordinator.js';
 import { recordFeedback, recordPlay, recordQueue, recordChatTurn, recentChatTurns, antiList, activeCooldowns, feedbackStats } from './state-db.js';
 import { recommendSongs, personalFm } from './ncm-client.js';
 import { warmup } from './embedder.js';
 import { indexAllSongs, indexAllFeedback, indexAllChatTurns, indexMdFile } from './indexer.js';
-import { enforceSourcePoolBudget, checkReasonHallucination } from './budget-enforcer.js';
+import { checkReasonHallucination } from './budget-enforcer.js';
 
 const config = yaml.parse(await fs.readFile('config.yaml', 'utf8'));
 const PORT = config.server.port;
@@ -164,7 +165,7 @@ app.post('/api/chat', async (req, res) => {
 
   try {
     const recommendPoolP = getRecommendPool(); // 与 RAG 检索并行,buildChatMessages 内部 await
-    const { system, messages } = await buildChatMessages({
+    const { system, messages, meta } = await buildChatMessages({
       userMessage: message,
       currentQueue,
       n: tuning.queue_length,
@@ -198,45 +199,13 @@ app.post('/api/chat', async (req, res) => {
       // Resolve play list → NCM URLs
       const plays = Array.isArray(parsed.play) ? parsed.play : [];
 
-      // === Budget enforcement (T17) ===
-      const exp = tuning.exploration_pct;
-      const target = {
-        lib: 100 - exp,
-        rec: Math.round(exp * 0.7),
-        wild: exp - Math.round(exp * 0.7),
-      };
-      // Specific asks win: only enforce the exploration ratio (and pay the ~20s
-      // retry) when the DJ EXPLICITLY flags request_scope=open. Anything else — a
-      // "specific" flag, or (commonly) an omitted flag — means the user named a
-      // direction, so honor the DJ's own picks over the ratio and skip the retry.
-      // Defaulting unset→specific keeps the fix robust to the model dropping the field.
-      const isOpenRequest = parsed.request_scope === 'open';
-      let budgetCheck = enforceSourcePoolBudget(plays, target);
-      if (!budgetCheck.ok && isOpenRequest) {
-        console.log(`[chat] budget deviation ${(budgetCheck.deviation * 100).toFixed(0)}%, retrying with hint`);
-        // say 已流式给用户,retry 只修 play[](非流式、不重说话)
-        const assistantEcho = (say ? say + '\n\n' : '')
-          + '```json\n' + JSON.stringify({ intent: 'recommend', play: parsed.play || [] }, null, 2) + '\n```';
-        const retryMessages = [...messages,
-          { role: 'assistant', content: assistantEcho },
-          { role: 'user', content: "你上一次推荐的 source_pool 比例不对. " + budgetCheck.hint + " 话不用重说,只重新输出 ```json``` 代码块(不含 say)." },
-        ];
-        try {
-          const raw2 = await callLlm({ system, messages: retryMessages, model: config.models.chat_mode, trigger: 'chat-retry' });
-          const parsed2 = extractJson(raw2);
-          if (Array.isArray(parsed2.play) && parsed2.play.length) {
-            plays.length = 0;
-            plays.push(...parsed2.play);
-            parsed.play = parsed2.play;
-            console.log(`[chat] retry succeeded, new plays: ${plays.length}`);
-          } else {
-            console.warn(`[chat] retry returned no plays, keeping original`);
-          }
-        } catch (e) {
-          console.warn(`[chat] retry failed: ${e.message}, keeping original`);
-        }
-      } else if (!budgetCheck.ok) {
-        console.log(`[chat] budget deviation ${(budgetCheck.deviation * 100).toFixed(0)}% ignored — request_scope=${parsed.request_scope || 'unset(→specific)'}, honoring 方向 over ratio`);
+      // === Familiar↔new 硬对齐(替代旧 source_pool budget retry)===
+      // 模型已在 prompt 里被告知本批确切的「库内 X / 全新 Y」。这里不信它自报的 source_pool,
+      // 用真实曲库判定每首库内/全新,多退少补(确定性换槽,不重试)→ 探索档位比例必然落地。
+      if (meta?.famTarget != null) {
+        const r = repairFamiliarNew(plays, meta);
+        parsed.play = plays;
+        console.log(`[chat] 档位=${meta.mode.name} 目标库内${meta.famTarget}/全新${meta.newTarget} | 模型给库内${r.before} → 校正后库内${r.familiar}/全新${r.newCount}${r.repaired ? ` (换${r.repaired}槽)` : ''}`);
       }
 
       // === Hallucination check (T17, best effort, only log + mask reason) ===

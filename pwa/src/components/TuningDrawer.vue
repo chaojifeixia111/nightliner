@@ -9,16 +9,19 @@
 
         <div class="slider-group">
           <label class="slider-label">
-            <span>探索系数</span>
-            <span class="val">{{ local.exploration_pct }}%</span>
+            <span>探索档位</span>
+            <span class="val">{{ currentMode.name }} · {{ currentMode.en }}</span>
           </label>
           <input
             type="range"
-            min="0" max="100" step="5"
+            min="0" max="100" step="25"
             v-model.number="local.exploration_pct"
             class="slider"
           />
-          <div class="hint">library : recommend : wildcard ≈ {{ libPct }} : {{ recPct }} : {{ wildPct }}</div>
+          <div class="ticks">
+            <span v-for="m in MODES" :key="m.value" :class="{ on: m.value === currentMode.value }">{{ m.name }}</span>
+          </div>
+          <div class="hint">{{ currentMode.desc }}</div>
         </div>
 
         <div class="slider-group">
@@ -70,6 +73,7 @@ watch(() => props.open, (v) => {
   live = false;
   if (v && props.tuning) {
     Object.assign(local, props.tuning);
+    local.exploration_pct = nearestMode(local.exploration_pct).value;  // 吸附到最近档位
     nextTick(() => { live = true; });
   }
 });
@@ -82,9 +86,18 @@ watch(local, (val) => {
   debounce = setTimeout(() => emit('change', { ...val }), 250);
 }, { deep: true });
 
-const libPct = computed(() => Math.round(100 - local.exploration_pct));
-const recPct = computed(() => Math.round(local.exploration_pct * 0.7));
-const wildPct = computed(() => Math.round(local.exploration_pct * 0.3));
+// 与后端 exploration-modes.js 对齐的 5 个命名档位(名字 + 一句话描述)
+const MODES = [
+  { value: 0, name: '舒适区', en: 'Comfort', desc: '只放你最爱、最常听的' },
+  { value: 25, name: '偏熟悉', en: 'Cozy', desc: '收藏里没常听的 + 一点同艺人深挖' },
+  { value: 50, name: '平衡', en: 'Balanced', desc: '一半熟，一半新' },
+  { value: 75, name: '偏探索', en: 'Venture', desc: '大半没听过的，锚在你口味上' },
+  { value: 100, name: '狂野', en: 'Wild', desc: '几乎全新，只留一点底色' },
+];
+function nearestMode(v) {
+  return MODES.reduce((b, m) => Math.abs(m.value - v) < Math.abs(b.value - v) ? m : b, MODES[0]);
+}
+const currentMode = computed(() => nearestMode(local.exploration_pct));
 </script>
 
 <style scoped>
@@ -140,6 +153,8 @@ const wildPct = computed(() => Math.round(local.exploration_pct * 0.3));
 }
 .val { color: var(--accent); font-weight: 500; }
 .hint { font-size: 10px; color: var(--text-dim); }
+.ticks { display: flex; justify-content: space-between; font-size: 8px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0; }
+.ticks .on { color: var(--accent); }
 .slider {
   -webkit-appearance: none;
   appearance: none;
