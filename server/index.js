@@ -5,8 +5,9 @@ import http from 'http';
 import yaml from 'yaml';
 import fs from 'fs/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { buildChatMessages } from './context-builder.js';
+import { buildChatMessages, libraryArtistNames } from './context-builder.js';
 import { repairFamiliarNew } from './align-batch.js';
+import { detectDirection, isContinuation, describeDirection } from './direction.js';
 import { callLlm, extractJson, callLlmStream } from './llm-adapter.js';
 import { resolvePlayList } from './playback-coordinator.js';
 import { recordFeedback, recordPlay, recordQueue, recordChatTurn, recentChatTurns, antiList, activeCooldowns, feedbackStats } from './state-db.js';
@@ -35,6 +36,8 @@ const broadcast = (msg) => {
 // In-memory current queue + now playing
 let currentQueue = [];
 let now = null;
+// 当前「方向」硬约束(语种/性别/艺人):新方向覆盖,"下一批/继续" 沿用,其它消息清空
+let currentDirection = null;
 
 // Play history stack for ⏮ previous track (max 30 entries)
 let playHistory = [];
@@ -164,6 +167,12 @@ app.post('/api/chat', async (req, res) => {
   };
 
   try {
+    // 方向解析:新方向覆盖;"下一批/继续" 沿用上一轮;其它消息清空(避免方向卡死在旧请求上)
+    const detected = detectDirection(message, { artistNames: await libraryArtistNames() });
+    if (detected) currentDirection = detected;
+    else if (!(isContinuation(message) && currentDirection)) currentDirection = null;
+    if (currentDirection) console.log(`[chat] 方向=${describeDirection(currentDirection)}${detected ? '' : ' (沿用上轮)'}`);
+
     const recommendPoolP = getRecommendPool(); // 与 RAG 检索并行,buildChatMessages 内部 await
     const { system, messages, meta } = await buildChatMessages({
       userMessage: message,
@@ -172,6 +181,7 @@ app.post('/api/chat', async (req, res) => {
       exploration_pct: tuning.exploration_pct,
       recommendPool: recommendPoolP,
       now,
+      direction: currentDirection,
     });
 
     const { say: parsedSay, parsed } = await callLlmStream({
@@ -205,7 +215,8 @@ app.post('/api/chat', async (req, res) => {
       if (meta?.famTarget != null) {
         const r = repairFamiliarNew(plays, meta);
         parsed.play = plays;
-        console.log(`[chat] 档位=${meta.mode.name} 目标库内${meta.famTarget}/全新${meta.newTarget} | 模型给库内${r.before} → 校正后库内${r.familiar}/全新${r.newCount}${r.repaired ? ` (换${r.repaired}槽)` : ''}`);
+        const dirLog = meta.direction ? ` 方向=${describeDirection(meta.direction)}` : '';
+        console.log(`[chat]${dirLog} 档位=${meta.mode.name} 目标库内${meta.famTarget}/全新${meta.newTarget} | 模型给库内${r.before} → 校正后库内${r.familiar}/全新${r.newCount}${r.repaired ? ` (换${r.repaired}槽${r.offDir ? `,其中跨方向${r.offDir}` : ''})` : ''}`);
       }
 
       // === Hallucination check (T17, best effort, only log + mask reason) ===

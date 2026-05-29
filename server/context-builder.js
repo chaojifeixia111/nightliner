@@ -1,10 +1,11 @@
 // server/context-builder.js
 // 拼装 chat-mode prompt 的 9 个片段（含 netease 曲库 + 推荐池 + 对话历史）
 import fs from 'fs/promises';
-import db, { recentPlays, recentFeedback, antiList, activeCooldowns, recentChatTurns } from './state-db.js';
+import db, { recentPlays, recentFeedback, antiList, activeCooldowns, recentChatTurns, skipStats, staleLoves } from './state-db.js';
 import { retrieveContext } from './retriever.js';
 import { buildExplorePool, songKey } from './explore-pool.js';
 import { modeForValue, familiarTarget } from './exploration-modes.js';
+import { songMatchesDirection, describeDirection, directionQuery } from './direction.js';
 
 const TEMPLATE_PATH = 'prompts/chat-mode.md';
 const SNAPSHOT_PATH = 'data/netease-snapshot.json';
@@ -96,6 +97,56 @@ async function libraryKeys() {
   } catch {}
   _libraryKeysCache = keys;
   return _libraryKeysCache;
+}
+
+// 全量收藏(snapshot + Apple Music),含 ncm_id(snapshot 为数字;Apple 为 null,不能查 simi)。
+// 方向激活时用它做「该方向收藏」的采样种子 + 库内候选,而不是只靠 RAG top-K。
+let _libraryFullCache = null;
+async function libraryFull() {
+  if (_libraryFullCache) return _libraryFullCache;
+  const out = [];
+  try {
+    const snapshot = JSON.parse(await fs.readFile(SNAPSHOT_PATH, 'utf8'));
+    const seen = new Set();
+    for (const pl of Object.values(snapshot.playlists || {})) {
+      const tag = PLAYLIST_TAG[pl.id] || '?';
+      for (const s of (pl.songs || [])) {
+        if (seen.has(s.id)) continue;
+        seen.add(s.id);
+        out.push({ ncm_id: s.id, name: s.name, artist: s.artists, tag });
+      }
+    }
+  } catch {}
+  try {
+    const md = await fs.readFile(APPLE_MD_PATH, 'utf8');
+    const re = /^\s*\d+\.\s+(.+?)\s+\/\s+(.+?)\s*$/gm;
+    let m;
+    while ((m = re.exec(md)) !== null) out.push({ ncm_id: null, name: m[1].trim(), artist: m[2].trim(), tag: 'M' });
+  } catch {}
+  _libraryFullCache = out;
+  return out;
+}
+
+// 曲库里出现过的艺人名(给 direction.js 做「点名艺人」匹配)
+export async function libraryArtistNames() {
+  const full = await libraryFull();
+  const set = new Set();
+  for (const s of full) {
+    for (const a of String(s.artist || '').split('/')) {
+      const t = a.trim();
+      if (t) set.add(t);
+    }
+  }
+  return [...set];
+}
+
+function shuffle(a) {
+  const x = [...a];
+  for (let i = x.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [x[i], x[j]] = [x[j], x[i]];
+  }
+  return x;
 }
 
 function fmtPlays(plays) {
@@ -199,11 +250,19 @@ function fmtSongs(songs) {
   if (!songs.length) return '(无相关曲库召回)';
   return songs.map((s, i) => `${i + 1}. ${s.name} / ${s.artist} [${s.tag}]`).join('\n');
 }
+function humanAge(sec) {
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - (sec || 0)));
+  if (s < 3600) return `${Math.round(s / 60)}min前`;
+  if (s < 86400) return `${Math.round(s / 3600)}h前`;
+  return `${Math.round(s / 86400)}天前`;
+}
 function fmtFeedbackRag(fbs) {
   if (!fbs.length) return '(无相关反馈召回)';
   return fbs.map(f => {
-    const ago = Math.round((Date.now() / 1000 - (f.ts || 0)) / 60);
-    return `- [${f.signal}] ${f.title} / ${f.artist} (${ago}min前)${f.reason ? ' · ' + f.reason : ''}`;
+    const days = (Date.now() / 1000 - (f.ts || 0)) / 86400;
+    // 旧 love 衰减:超过 90 天的「喜欢」别再当作当前口味(口味有时效性)
+    const stale = f.signal === 'love' && days > 90 ? ' ⚠旧爱(可能已过气,别当当前口味)' : '';
+    return `- [${f.signal}] ${f.title} / ${f.artist} (${humanAge(f.ts)})${f.reason ? ' · ' + f.reason : ''}${stale}`;
   }).join('\n');
 }
 function fmtSnippets(arr, empty = '(无相关召回)') {
@@ -222,7 +281,7 @@ function fmtExplorePool(cands) {
 
 export async function buildChatMessages({
   userMessage, currentQueue, n = 5, exploration_pct = 30,
-  recommendPool = [], now = null,
+  recommendPool = [], now = null, direction = null,
 }) {
   const [systemTpl, userTpl, djPersona] = await Promise.all([
     fs.readFile(SYSTEM_PATH, 'utf8'),
@@ -230,10 +289,14 @@ export async function buildChatMessages({
     readOrEmpty('user/dj-persona.md'),
   ]);
 
+  // 方向激活时用方向词做 RAG 检索,而不是 "下一批" 这种无语义空查询
+  // —— 否则召回的曲库片段会漂走、退回到「最中心的常播老歌」(用户吐槽的「老推同几首」)。
+  const retrievalQuery = direction ? `${directionQuery(direction)} ${userMessage}`.trim() : userMessage;
+
   // RAG 检索 与 推荐池拉取并行(推荐池冷缓存时是一次 NCM 网络往返,与 embedding 检索重叠掉)
   const [retrieved, resolvedPool] = await Promise.all([
     retrieveContext({
-      userMessage,
+      userMessage: retrievalQuery,
       recentTurns: [],
       budgets: { song: 18, feedback: 8, life_stage: 3, taste: 3, mood_rule: 2, vibe_anchor: 5, chat_turn: 3 },
     }),
@@ -249,28 +312,47 @@ export async function buildChatMessages({
   const libPct = mode.lib;
   const recPct = mode.rec;
   const wildPct = mode.wild;
-  const famTarget = familiarTarget(mode, n);   // 本批硬对齐:库内应有几首
-  const newTarget = n - famTarget;             // 其余为全新(不在你收藏里)
-  const libKeys = await libraryKeys();         // 复用:既给 explore 排除,也给 server 校验
+  let famTarget = familiarTarget(mode, n);   // 本批目标:库内几首(方向供给不足时会上调)
+  let newTarget = n - famTarget;             // 其余为全新(不在你收藏里)
+  const libKeys = await libraryKeys();        // 复用:既给 explore 排除,也给 server 校验
+  const dirMatch = (name, artist) => songMatchesDirection(name, artist, direction);
 
-  // wildcard 桶 = 相似歌探索池。只在有 wildcard 配额时才拉(exp=0 时跳过,省一次往返)。
-  // 种子:now-playing + RAG 召回的曲库歌(都带数字 ncm_id 且贴合当前语境)。
+  // 降权集:近期频繁跳过 + 「曾 love 现跳」的旧爱。滚动 30 天窗口,自动过期(不写永久 cooldown)。
+  const demotedRows = [...skipStats({ sinceDays: 30, minSkips: 3 }), ...staleLoves({ sinceDays: 30, minSkips: 2 })];
+  const demotedMap = new Map();
+  for (const r of demotedRows) demotedMap.set(songKey(r.song_title, r.song_artist), r);
+  const demoted = [...demotedMap.values()];
+
+  // 曲库片段:方向激活时从「全量收藏里符合方向的歌」随机采样(而非只取 RAG top-K),
+  // 既保证够多的库内候选,又每次给不同的歌 → 直接缓解「老推同几首安全牌」。
+  let librarySlice = retrieved.songs;
+  if (direction) {
+    const inDir = shuffle((await libraryFull()).filter(s => dirMatch(s.name, s.artist)));
+    librarySlice = inDir.length
+      ? inDir.slice(0, 20).map(s => ({ name: s.name, artist: s.artist, tag: s.tag, ncm_id: typeof s.ncm_id === 'number' ? s.ncm_id : undefined }))
+      : retrieved.songs.filter(s => dirMatch(s.name, s.artist));
+  }
+
+  // 推荐池(网易云每日)按方向过滤 —— 方向是硬约束,跨语种的歌直接不进池。
+  const dirRecommend = direction ? resolvedPool.filter(s => dirMatch(s.name, s.artist)) : resolvedPool;
+
+  // 「全新」供给 = 相似歌探索池。方向激活时种子取自「该方向收藏曲(带 ncm_id)」→ simi 近邻 +
+  // 同艺人深挖天然落在方向内;再对产物按方向过滤,滤掉 simi 漂出去的跨语种歌。
+  const needExplore = wildPct > 0 || (direction && newTarget > 0);
   let explorePool = [];
-  if (wildPct > 0) {
-    const seeds = [];
-    if (now && typeof now.ncm_id === 'number') {
-      seeds.push({ ncm_id: now.ncm_id, name: now.title, artist: now.artist });
+  if (needExplore) {
+    let seeds = [];
+    if (direction) {
+      const inDirSeeds = shuffle((await libraryFull()).filter(s => typeof s.ncm_id === 'number' && dirMatch(s.name, s.artist)));
+      seeds = inDirSeeds.slice(0, 6).map(s => ({ ncm_id: s.ncm_id, name: s.name, artist: s.artist }));
     }
-    // 随机抽种子(而非每次都取 RAG 前几名)→ 每次相邻探索命中不同的近邻,
-    // 避免反复推同几首。retrieved.songs 对同一 query 是确定的,这里靠 shuffle 引入变化。
-    const seedPool = retrieved.songs.filter(s => typeof s.ncm_id === 'number');
-    for (let i = seedPool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [seedPool[i], seedPool[j]] = [seedPool[j], seedPool[i]];
-    }
-    for (const s of seedPool) {
-      if (seeds.length >= 5) break;
-      seeds.push({ ncm_id: s.ncm_id, name: s.name, artist: s.artist });
+    if (!seeds.length) {
+      // 无方向(或方向内无带 id 的种子)→ now-playing + RAG 随机种子(原行为)
+      if (now && typeof now.ncm_id === 'number') seeds.push({ ncm_id: now.ncm_id, name: now.title, artist: now.artist });
+      for (const s of shuffle(retrieved.songs.filter(s => typeof s.ncm_id === 'number'))) {
+        if (seeds.length >= 5) break;
+        seeds.push({ ncm_id: s.ncm_id, name: s.name, artist: s.artist });
+      }
     }
     if (seeds.length) {
       const excludeKeys = new Set(libKeys);  // 你已收藏的全部排除 → explore/深挖只给新东西
@@ -282,9 +364,22 @@ export async function buildChatMessages({
           excludeKeys.add(songKey(f.song_title, f.song_artist));
         }
       }
-      explorePool = await buildExplorePool({ seeds, excludeKeys, perSeedCap: mode.perSeedCap, limit: 12, deepCutArtists: mode.deepCutArtists })
-        .catch(e => { console.warn('[explore] pool failed:', e.message); return []; });
+      for (const d of demoted) excludeKeys.add(songKey(d.song_title, d.song_artist));  // 降权集也排除
+      explorePool = await buildExplorePool({
+        seeds, excludeKeys,
+        perSeedCap: direction ? Math.max(mode.perSeedCap, 2) : mode.perSeedCap,
+        limit: 14,
+        deepCutArtists: direction ? Math.max(mode.deepCutArtists, 3) : mode.deepCutArtists,
+      }).catch(e => { console.warn('[explore] pool failed:', e.message); return []; });
+      if (direction) explorePool = explorePool.filter(c => dirMatch(c.name, c.artist));  // 滤掉 simi 漂出方向的
     }
+  }
+
+  // 方向激活、且方向内「全新」供给不足 → 比例让位:少给全新、多给方向内库内歌,
+  // 绝不用跑偏方向的歌凑 newTarget(这正是之前英文乱入 + 谎报语种的根因)。
+  if (direction) {
+    const inDirNewSupply = explorePool.length + dirRecommend.length;
+    if (inDirNewSupply < newTarget) { newTarget = inDirNewSupply; famTarget = n - newTarget; }
   }
 
   const userContent = userTpl
@@ -303,13 +398,19 @@ export async function buildChatMessages({
     .replace('{{LIB_PCT}}', String(libPct))
     .replace('{{REC_PCT}}', String(recPct))
     .replace('{{WILD_PCT}}', String(wildPct))
-    .replace('{{N_SONGS}}', String(retrieved.songs.length))
+    .replace('{{DIRECTION}}', direction ? describeDirection(direction) : '(无 —— 开放推荐,按你整体口味来)')
+    .replace('{{N_SONGS}}', String(librarySlice.length))
     .replace('{{N}}', String(n))
-    .replace('{{LIBRARY_SLICE}}', fmtSongs(retrieved.songs))
-    .replace('{{RECOMMEND_POOL}}', resolvedPool.length
-      ? [...resolvedPool].sort(() => Math.random() - 0.5).slice(0, 20).map((s, i) => `${i + 1}. ${s.name} / ${s.artist}`).join('\n')
-      : '(今天的每日推荐没拉到 —— 可能 cookie 过期或本地 NCM 服务未启动;本轮没有 recommend 池,别凭空编 recommend 歌)')
+    .replace('{{LIBRARY_SLICE}}', fmtSongs(librarySlice))
+    .replace('{{RECOMMEND_POOL}}', dirRecommend.length
+      ? shuffle(dirRecommend).slice(0, 20).map((s, i) => `${i + 1}. ${s.name} / ${s.artist}`).join('\n')
+      : (direction
+        ? '(每日推荐池里没有符合当前方向的歌 —— 别从这里硬凑,改用库内或下方相似探索)'
+        : '(今天的每日推荐没拉到 —— 可能 cookie 过期或本地 NCM 服务未启动;本轮没有 recommend 池,别凭空编 recommend 歌)'))
     .replace('{{EXPLORE_POOL}}', fmtExplorePool(explorePool))
+    .replace('{{DEMOTED}}', demoted.length
+      ? demoted.map(d => `- ${d.song_title} / ${d.song_artist} (近期跳过 ${d.skips} 次)`).join('\n')
+      : '(无)')
     .replace('{{FEEDBACK_SLICE}}', fmtFeedbackRag(retrieved.feedback))
     .replace('{{TASTE_SLICE}}', fmtSnippets(retrieved.taste_snippets))
     .replace('{{LIFE_STAGE_SLICE}}', fmtSnippets(retrieved.life_stage_snippets))
@@ -343,6 +444,6 @@ export async function buildChatMessages({
 
   return {
     system, messages,
-    meta: { mode, n, famTarget, newTarget, libKeys, librarySlice: retrieved.songs, explorePool, recommendPool: resolvedPool },
+    meta: { mode, n, famTarget, newTarget, libKeys, direction, librarySlice, explorePool, recommendPool: dirRecommend },
   };
 }
