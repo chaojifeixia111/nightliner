@@ -4,8 +4,9 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 import yaml from 'yaml';
 import fs from 'fs/promises';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { buildChatMessages } from './context-builder.js';
-import { callLlm, extractJson } from './llm-adapter.js';
+import { callLlm, extractJson, callLlmStream } from './llm-adapter.js';
 import { resolvePlayList } from './playback-coordinator.js';
 import { recordFeedback, recordPlay, recordQueue, recordChatTurn, recentChatTurns, antiList, activeCooldowns, feedbackStats } from './state-db.js';
 import { recommendSongs, personalFm } from './ncm-client.js';
@@ -37,12 +38,24 @@ let now = null;
 // Play history stack for ⏮ previous track (max 30 entries)
 let playHistory = [];
 
-// In-memory tuning state
+// Tuning state — persisted to disk so它不会每次重启回弹默认值
+const TUNING_PATH = 'data/tuning.json';
 let tuning = {
   exploration_pct: 30,
   queue_length: 10,
   chattiness: 'medium',
 };
+try {
+  Object.assign(tuning, JSON.parse(readFileSync(TUNING_PATH, 'utf8')));
+} catch { /* 没有存档就用默认值 */ }
+
+function persistTuning() {
+  try {
+    writeFileSync(TUNING_PATH, JSON.stringify(tuning, null, 2));
+  } catch (e) {
+    console.warn('[tuning] persist failed:', e.message);
+  }
+}
 
 // Recommend pool cache (refreshed every 30 min)
 let recommendCache = { ts: 0, songs: [] };
@@ -122,6 +135,7 @@ app.post('/api/tuning', (req, res) => {
   if (exploration_pct !== undefined) tuning.exploration_pct = Number(exploration_pct);
   if (queue_length !== undefined) tuning.queue_length = Number(queue_length);
   if (chattiness !== undefined) tuning.chattiness = chattiness;
+  persistTuning();
   broadcast({ type: 'tuning', data: tuning });
   res.json({ ok: true, tuning });
 });
@@ -134,27 +148,51 @@ app.post('/api/chat', async (req, res) => {
   res.json({ ok: true, status: 'thinking' });
   broadcast({ type: 'thinking', data: true });
 
+  const ts = new Date().toISOString();
+  const streamId = `s${Date.now()}`;
+  let streamStarted = false;
+  let streamedSay = '';
+  const onSayDelta = (delta) => {
+    if (!streamStarted) {
+      broadcast({ type: 'dj_stream_start', data: { id: streamId, ts } });
+      broadcast({ type: 'thinking', data: false });
+      streamStarted = true;
+    }
+    streamedSay += delta;
+    broadcast({ type: 'dj_stream_delta', data: { id: streamId, delta } });
+  };
+
   try {
-    const recommendPool = await getRecommendPool();
+    const recommendPoolP = getRecommendPool(); // 与 RAG 检索并行,buildChatMessages 内部 await
     const { system, messages } = await buildChatMessages({
       userMessage: message,
       currentQueue,
       n: tuning.queue_length,
       exploration_pct: tuning.exploration_pct,
-      recommendPool,
+      recommendPool: recommendPoolP,
       now,
     });
-    const raw = await callLlm({ system, messages, model: config.models.chat_mode, trigger: 'chat' });
-    const parsed = extractJson(raw);
+
+    const { say: parsedSay, parsed } = await callLlmStream({
+      system, messages, model: config.models.chat_mode, trigger: 'chat', onSayDelta,
+    });
 
     const intent = parsed.intent || 'recommend';
-    console.log(`[chat] intent=${intent}, say="${(parsed.say || '').slice(0, 40)}..."`);
+    // say 优先用流式累积的;模型若把话塞进 JSON(旧习惯)或直接吐 JSON 则回退
+    const say = (streamedSay.trim() || parsedSay || parsed.say || '').trim();
+    // 模型没流式 prose(直接 JSON)但有 say → 补发一气泡
+    if (!streamStarted && say) {
+      broadcast({ type: 'dj_stream_start', data: { id: streamId, ts } });
+      broadcast({ type: 'thinking', data: false });
+      broadcast({ type: 'dj_stream_delta', data: { id: streamId, delta: say } });
+      streamStarted = true;
+    }
+    if (streamStarted) broadcast({ type: 'dj_stream_end', data: { id: streamId, say } });
+    console.log(`[chat] intent=${intent}, say="${say.slice(0, 40)}..."`);
 
     // Memory tracking
     let recordedPlayTitles = [];
     let recordedFeedback = null;
-
-    const ts = new Date().toISOString();
 
     if (intent === 'recommend') {
       // Resolve play list → NCM URLs
@@ -167,16 +205,22 @@ app.post('/api/chat', async (req, res) => {
         rec: Math.round(exp * 0.7),
         wild: exp - Math.round(exp * 0.7),
       };
+      // Specific asks win: only enforce the exploration ratio (and pay the ~20s
+      // retry) when the DJ EXPLICITLY flags request_scope=open. Anything else — a
+      // "specific" flag, or (commonly) an omitted flag — means the user named a
+      // direction, so honor the DJ's own picks over the ratio and skip the retry.
+      // Defaulting unset→specific keeps the fix robust to the model dropping the field.
+      const isOpenRequest = parsed.request_scope === 'open';
       let budgetCheck = enforceSourcePoolBudget(plays, target);
-      if (!budgetCheck.ok) {
+      if (!budgetCheck.ok && isOpenRequest) {
         console.log(`[chat] budget deviation ${(budgetCheck.deviation * 100).toFixed(0)}%, retrying with hint`);
-        const retryMessages = [...messages, {
-          role: 'assistant',
-          content: '```json\n' + JSON.stringify({ intent: 'recommend', say: parsed.say || '', play: parsed.play || [] }, null, 2) + '\n```',
-        }, {
-          role: 'user',
-          content: `你上一次的回答 source_pool 比例不对. ${budgetCheck.hint} 重新输出 JSON.`,
-        }];
+        // say 已流式给用户,retry 只修 play[](非流式、不重说话)
+        const assistantEcho = (say ? say + '\n\n' : '')
+          + '```json\n' + JSON.stringify({ intent: 'recommend', play: parsed.play || [] }, null, 2) + '\n```';
+        const retryMessages = [...messages,
+          { role: 'assistant', content: assistantEcho },
+          { role: 'user', content: "你上一次推荐的 source_pool 比例不对. " + budgetCheck.hint + " 话不用重说,只重新输出 ```json``` 代码块(不含 say)." },
+        ];
         try {
           const raw2 = await callLlm({ system, messages: retryMessages, model: config.models.chat_mode, trigger: 'chat-retry' });
           const parsed2 = extractJson(raw2);
@@ -184,7 +228,6 @@ app.post('/api/chat', async (req, res) => {
             plays.length = 0;
             plays.push(...parsed2.play);
             parsed.play = parsed2.play;
-            if (parsed2.say) parsed.say = parsed2.say;
             console.log(`[chat] retry succeeded, new plays: ${plays.length}`);
           } else {
             console.warn(`[chat] retry returned no plays, keeping original`);
@@ -192,6 +235,8 @@ app.post('/api/chat', async (req, res) => {
         } catch (e) {
           console.warn(`[chat] retry failed: ${e.message}, keeping original`);
         }
+      } else if (!budgetCheck.ok) {
+        console.log(`[chat] budget deviation ${(budgetCheck.deviation * 100).toFixed(0)}% ignored — request_scope=${parsed.request_scope || 'unset(→specific)'}, honoring 方向 over ratio`);
       }
 
       // === Hallucination check (T17, best effort, only log + mask reason) ===
@@ -236,12 +281,11 @@ app.post('/api/chat', async (req, res) => {
       broadcast({ type: 'queue', data: currentQueue });
       broadcast({ type: 'now', data: now });
 
-      // DJ opening
-      broadcast({ type: 'dj_message', data: { ts, kind: 'opening', text: parsed.say } });
+      // DJ opening 已通过 dj_stream_* 流式给到前端,这里不再重复广播
       // Per-song reasons
       for (let i = 0; i < playable.length; i++) {
         const s = playable[i];
-        const reason = plays[i]?.reason || '';
+        const reason = s.reason || '';
         if (reason) {
           broadcast({ type: 'dj_message', data: { ts, kind: 'song', title: s.title, text: reason } });
         }
@@ -276,9 +320,7 @@ app.post('/api/chat', async (req, res) => {
         });
         recordedFeedback = fb;
 
-        // Broadcast say (DJ acknowledgment)
-        broadcast({ type: 'dj_message', data: { ts, kind: 'opening', text: parsed.say } });
-
+        // DJ 口头确认已流式给到前端;这里只补一条结构化 system 确认
         // Broadcast system confirmation
         const target = fb.target_title
           ? `"${fb.target_title} / ${fb.target_artist}"`
@@ -291,8 +333,7 @@ app.post('/api/chat', async (req, res) => {
       }
 
     } else {
-      // intent === 'chat': just broadcast say, no queue change
-      broadcast({ type: 'dj_message', data: { ts, kind: 'chat_reply', text: parsed.say } });
+      // intent === 'chat': say 已流式给到前端,无 queue 变化,这里无需再广播
     }
 
     broadcast({ type: 'thinking', data: false });
@@ -301,7 +342,7 @@ app.post('/api/chat', async (req, res) => {
     recordChatTurn({
       user_message: message,
       intent,
-      dj_say: parsed.say,
+      dj_say: say,
       play_titles_json: JSON.stringify(recordedPlayTitles),
       queue_action: parsed.queueAction || null,
       feedback_extract_json: recordedFeedback ? JSON.stringify(recordedFeedback) : null,
@@ -312,7 +353,9 @@ app.post('/api/chat', async (req, res) => {
   } catch (e) {
     console.error('chat error:', e);
     broadcast({ type: 'thinking', data: false });
-    broadcast({ type: 'dj_message', data: { ts: new Date().toISOString(), kind: 'opening', text: '出错了:' + e.message } });
+    // 若已开了流式气泡,先收尾,避免前端留一个永远在打字的空泡
+    if (streamStarted) broadcast({ type: 'dj_stream_end', data: { id: streamId, say: streamedSay.trim() } });
+    broadcast({ type: 'dj_message', data: { ts: new Date().toISOString(), kind: 'system', text: '出错了:' + e.message } });
   }
 });
 

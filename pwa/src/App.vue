@@ -9,15 +9,15 @@
       @user-message="pushDjMessage"
     />
     <div class="djlog-wrap">
-      <DJLog :messages="djMessages" :thinking="thinking" :stats="lastStats" />
+      <DJLog :messages="djMessages" :thinking="thinking" :stats="lastStats" :streaming-id="streamingId" />
     </div>
-    <ChatInput @send="onChat" @command="onCommand" />
+    <ChatInput :busy="thinking" @send="onChat" @command="onCommand" />
     <StatusBar :connected="connected" />
     <TuningDrawer
       :open="tuningOpen"
       :tuning="state.tuning"
       @close="tuningOpen = false"
-      @apply="onApplyTuning"
+      @change="onTuningChange"
     />
     <QueueDrawer
       :open="queueOpen"
@@ -45,6 +45,7 @@ const queueOpen = ref(false);
 const thinking = ref(false);
 const djMessages = ref([]);
 const lastStats = ref(null);
+const streamingId = ref(null);
 
 const state = reactive({
   now: null,
@@ -63,6 +64,35 @@ function pushDjMessage(msg) {
   }
 }
 
+// --- Streaming DJ reply (token-by-token) ---
+function startStream({ id, ts }) {
+  thinking.value = false; // DJ 开口了,收起"正在选歌"
+  streamingId.value = id;
+  pushDjMessage({ ts: ts || new Date().toISOString(), kind: 'stream', id, text: '' });
+}
+function appendStream({ id, delta }) {
+  const m = djMessages.value.find(x => x.id === id);
+  if (m) {
+    m.text += delta;
+  } else {
+    // start 事件没收到(或被 cap 挤掉):兜底新建
+    thinking.value = false;
+    streamingId.value = id;
+    pushDjMessage({ ts: new Date().toISOString(), kind: 'stream', id, text: delta });
+  }
+}
+function endStream({ id, say }) {
+  const m = djMessages.value.find(x => x.id === id);
+  if (m) {
+    if (say) m.text = say; // 用服务端的权威 say 收尾(去掉流式尾部杂质)
+    else if (!m.text) {
+      const idx = djMessages.value.findIndex(x => x.id === id);
+      if (idx >= 0) djMessages.value.splice(idx, 1); // 空 say → 丢掉占位泡
+    }
+  }
+  if (streamingId.value === id) streamingId.value = null;
+}
+
 onMounted(() => {
   ws = connectWs((msg) => {
     if (msg.type === 'connected') connected.value = true;
@@ -72,6 +102,9 @@ onMounted(() => {
     if (msg.type === 'thinking') thinking.value = msg.data;
     if (msg.type === 'dj_message') pushDjMessage(msg.data);
     if (msg.type === 'stats') lastStats.value = msg.data;
+    if (msg.type === 'dj_stream_start') startStream(msg.data);
+    if (msg.type === 'dj_stream_delta') appendStream(msg.data);
+    if (msg.type === 'dj_stream_end') endStream(msg.data);
   });
 
   // Fetch initial tuning
@@ -89,10 +122,17 @@ function onFeedback(payload) {
 }
 
 function onChat(text) {
+  // Echo the user's message immediately so the send is visibly acknowledged
+  pushDjMessage({ ts: new Date().toISOString(), kind: 'user', text });
+  // Show the thinking state right away, without waiting for the WS round-trip
+  thinking.value = true;
   fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: text }),
+  }).catch(() => {
+    thinking.value = false;
+    pushDjMessage({ ts: new Date().toISOString(), kind: 'system', text: '发送失败 — 后端没响应，检查服务是否在运行' });
   });
 }
 
@@ -109,13 +149,13 @@ function onPrevious() {
   fetch('/api/previous', { method: 'POST' }).catch(() => {});
 }
 
-function onApplyTuning(newTuning) {
+// 滑杆即时生效:拖动/点击后防抖上报,抽屉不关闭,可继续微调
+function onTuningChange(newTuning) {
   fetch('/api/tuning', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(newTuning),
-  });
-  tuningOpen.value = false;
+  }).catch(() => {});
 }
 
 // CLI 风格斜杠命令(本地处理,不发给 LLM)

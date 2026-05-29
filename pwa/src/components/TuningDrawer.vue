@@ -47,17 +47,16 @@
           </div>
         </div>
 
-        <button class="apply-btn" @click="onApply">应用</button>
       </div>
     </div>
   </transition>
 </template>
 
 <script setup>
-import { reactive, watch, computed } from 'vue';
+import { reactive, watch, computed, nextTick } from 'vue';
 
 const props = defineProps({ open: Boolean, tuning: Object });
-const emit = defineEmits(['close', 'apply']);
+const emit = defineEmits(['close', 'change']);
 
 const local = reactive({
   exploration_pct: 30,
@@ -65,17 +64,27 @@ const local = reactive({
   chattiness: 'medium',
 });
 
+// 只在抽屉打开、把后端值灌进 local 之后才允许上报,避免初始同步触发一次空 POST
+let live = false;
 watch(() => props.open, (v) => {
-  if (v && props.tuning) Object.assign(local, props.tuning);
+  live = false;
+  if (v && props.tuning) {
+    Object.assign(local, props.tuning);
+    nextTick(() => { live = true; });
+  }
 });
+
+// 拖动/点击即生效:防抖后直接上报,不再需要手动「应用」
+let debounce = null;
+watch(local, (val) => {
+  if (!live) return;
+  clearTimeout(debounce);
+  debounce = setTimeout(() => emit('change', { ...val }), 250);
+}, { deep: true });
 
 const libPct = computed(() => Math.round(100 - local.exploration_pct));
 const recPct = computed(() => Math.round(local.exploration_pct * 0.7));
 const wildPct = computed(() => Math.round(local.exploration_pct * 0.3));
-
-function onApply() {
-  emit('apply', { ...local });
-}
 </script>
 
 <style scoped>
@@ -180,21 +189,6 @@ function onApply() {
   border-color: var(--accent-dim);
   color: var(--text);
 }
-.apply-btn {
-  margin-top: auto;
-  padding: 12px;
-  background: var(--accent);
-  border: none;
-  color: var(--bg);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  letter-spacing: 1px;
-  transition: opacity 0.15s;
-}
-.apply-btn:hover { opacity: 0.85; }
-
 .drawer-enter-active, .drawer-leave-active { transition: transform 0.25s ease; }
 .drawer-enter-from, .drawer-leave-to { transform: translateX(100%); }
 </style>

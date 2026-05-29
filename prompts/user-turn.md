@@ -21,6 +21,10 @@
 ### 网易云推荐池 (source_pool=recommend 必须从这里取)
 {{RECOMMEND_POOL}}
 
+### 相似歌曲探索候选 (source_pool=wildcard 优先从这里取 —— 参考,非指令,可弃可重排)
+基于你 now-playing / 最近在听的歌的真实近邻,已过滤掉 anti/cooldown/最近播放/不喜欢。
+{{EXPLORE_POOL}}
+
 ### 相关历史反馈
 {{FEEDBACK_SLICE}}
 

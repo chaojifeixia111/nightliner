@@ -83,70 +83,68 @@ function pickBest(searchResult, targetTitle, targetArtist) {
   return null;
 }
 
+// 解析单首歌 → 可播放直链(独立无副作用,可并行)
+async function resolveOne(p, level) {
+  const q = `${p.title} ${p.artist}`;
+  const entry = { title: p.title, artist: p.artist, reason: p.reason, found: false };
+
+  try {
+    const sr = await cloudsearch(q, { limit: 5 });
+    const best = pickBest(sr, p.title, p.artist);
+    if (!best) {
+      console.warn(`[playback] 未命中: ${q}`);
+      return entry;
+    }
+    const norm = normalizeSong(best);
+    const urlResp = await songUrl(best.id, level);
+    const data0 = urlResp?.data?.[0];
+    const url = data0?.url;
+    if (!url) {
+      // 详细诊断:fee=1=VIP独享,fee=4=专辑数字售卖,code 非 200 = 鉴权问题
+      const diag = {
+        fee: data0?.fee,
+        code: data0?.code,
+        freeTrial: data0?.freeTrialPrivilege?.resConsumable,
+        level: data0?.level,
+      };
+      console.warn(`[playback] 命中但无 URL: ${norm.name} / ${norm.artistName} | ${JSON.stringify(diag)}`);
+      return { ...entry, ncm_id: best.id };
+    }
+
+    // Attempt to get picUrl; fall back to song/detail if missing
+    let picUrl = norm.picUrl;
+    if (!picUrl) {
+      try {
+        const detail = await songDetail([best.id]);
+        picUrl = detail?.songs?.[0]?.al?.picUrl || null;
+      } catch {
+        picUrl = null;
+      }
+    }
+    if (!picUrl) {
+      console.log(`[playback] no cover for: ${norm.name}`);
+    }
+
+    return {
+      ...entry,
+      ncm_id: best.id,
+      url,
+      duration_ms: norm.duration,
+      ncm_name: norm.name,
+      ncm_artist: norm.artistName,
+      pic_url: picUrl,
+      found: true,
+    };
+  } catch (e) {
+    console.warn(`[playback] 错误 ${q}: ${e.message}`);
+    return entry;
+  }
+}
+
 // 给一个 play[],返回 [{ title, artist, ncm_id, url, duration_ms, found: true|false }, ...]
+// 每首歌相互独立 → 并行解析(顺序由 Promise.all 保持,与 play[] 对齐)
 export async function resolvePlayList(plays) {
   const config = await getConfig();
   const level = config.ncm.song_url_level;
-
-  const resolved = [];
-  for (const p of plays) {
-    const q = `${p.title} ${p.artist}`;
-    let entry = { title: p.title, artist: p.artist, found: false };
-
-    try {
-      const sr = await cloudsearch(q, { limit: 5 });
-      const best = pickBest(sr, p.title, p.artist);
-      if (!best) {
-        console.warn(`[playback] 未命中: ${q}`);
-        resolved.push(entry);
-        continue;
-      }
-      const norm = normalizeSong(best);
-      const urlResp = await songUrl(best.id, level);
-      const data0 = urlResp?.data?.[0];
-      const url = data0?.url;
-      if (!url) {
-        // 详细诊断:fee=1=VIP独享,fee=4=专辑数字售卖,code 非 200 = 鉴权问题
-        const diag = {
-          fee: data0?.fee,
-          code: data0?.code,
-          freeTrial: data0?.freeTrialPrivilege?.resConsumable,
-          level: data0?.level,
-        };
-        console.warn(`[playback] 命中但无 URL: ${norm.name} / ${norm.artistName} | ${JSON.stringify(diag)}`);
-        resolved.push({ ...entry, ncm_id: best.id });
-        continue;
-      }
-
-      // Attempt to get picUrl; fall back to song/detail if missing
-      let picUrl = norm.picUrl;
-      if (!picUrl) {
-        try {
-          const detail = await songDetail([best.id]);
-          picUrl = detail?.songs?.[0]?.al?.picUrl || null;
-        } catch {
-          picUrl = null;
-        }
-      }
-      if (!picUrl) {
-        console.log(`[playback] no cover for: ${norm.name}`);
-      }
-
-      resolved.push({
-        ...entry,
-        ncm_id: best.id,
-        url,
-        duration_ms: norm.duration,
-        ncm_name: norm.name,
-        ncm_artist: norm.artistName,
-        pic_url: picUrl,
-        found: true,
-      });
-    } catch (e) {
-      console.warn(`[playback] 错误 ${q}: ${e.message}`);
-      resolved.push(entry);
-    }
-  }
-
-  return resolved;
+  return Promise.all(plays.map(p => resolveOne(p, level)));
 }

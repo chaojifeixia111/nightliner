@@ -3,6 +3,7 @@
 import fs from 'fs/promises';
 import db, { recentPlays, recentFeedback, antiList, activeCooldowns, recentChatTurns } from './state-db.js';
 import { retrieveContext } from './retriever.js';
+import { buildExplorePool, songKey } from './explore-pool.js';
 
 const TEMPLATE_PATH = 'prompts/chat-mode.md';
 const SNAPSHOT_PATH = 'data/netease-snapshot.json';
@@ -186,6 +187,13 @@ function fmtSnippets(arr, empty = '(无相关召回)') {
   if (!arr.length) return empty;
   return arr.map((s, i) => `### snippet ${i + 1}\n${s}`).join('\n\n');
 }
+function fmtExplorePool(cands) {
+  if (!cands || !cands.length) return '(无 explore 候选 — 当前没合适的相似歌种子)';
+  return cands.map((c, i) => {
+    const via = c.via?.length ? `(灵感来自 ${c.via.map(v => `«${v}»`).join('、')})` : '';
+    return `${i + 1}. ${c.name} / ${c.artist} ${via}`.trim();
+  }).join('\n');
+}
 
 export async function buildChatMessages({
   userMessage, currentQueue, n = 5, exploration_pct = 30,
@@ -197,12 +205,15 @@ export async function buildChatMessages({
     readOrEmpty('user/dj-persona.md'),
   ]);
 
-  // RAG 检索
-  const retrieved = await retrieveContext({
-    userMessage,
-    recentTurns: [],
-    budgets: { song: 30, feedback: 8, life_stage: 3, taste: 3, mood_rule: 2, vibe_anchor: 5, chat_turn: 3 },
-  });
+  // RAG 检索 与 推荐池拉取并行(推荐池冷缓存时是一次 NCM 网络往返,与 embedding 检索重叠掉)
+  const [retrieved, resolvedPool] = await Promise.all([
+    retrieveContext({
+      userMessage,
+      recentTurns: [],
+      budgets: { song: 18, feedback: 8, life_stage: 3, taste: 3, mood_rule: 2, vibe_anchor: 5, chat_turn: 3 },
+    }),
+    Promise.resolve(recommendPool), // 可传 array 或 promise
+  ]);
 
   const system = systemTpl.replace('{{DJ_PERSONA}}', djPersona || '(dj-persona.md 为空)');
 
@@ -211,6 +222,33 @@ export async function buildChatMessages({
   const libPct = 100 - exploration_pct;
   const recPct = Math.round(exploration_pct * 0.7);
   const wildPct = exploration_pct - recPct;
+
+  // wildcard 桶 = 相似歌探索池。只在有 wildcard 配额时才拉(exp=0 时跳过,省一次往返)。
+  // 种子:now-playing + RAG 召回的曲库歌(都带数字 ncm_id 且贴合当前语境)。
+  let explorePool = [];
+  if (wildPct > 0) {
+    const seeds = [];
+    if (now && typeof now.ncm_id === 'number') {
+      seeds.push({ ncm_id: now.ncm_id, name: now.title, artist: now.artist });
+    }
+    for (const s of retrieved.songs) {
+      if (seeds.length >= 5) break;
+      if (typeof s.ncm_id === 'number') seeds.push({ ncm_id: s.ncm_id, name: s.name, artist: s.artist });
+    }
+    if (seeds.length) {
+      const excludeKeys = new Set();
+      for (const a of antiList()) excludeKeys.add(songKey(a.song_title, a.song_artist));
+      for (const c of activeCooldowns()) excludeKeys.add(songKey(c.song_title, c.song_artist));
+      for (const p of recentPlays(20)) excludeKeys.add(songKey(p.title, p.artist));
+      for (const f of recentFeedback(20)) {
+        if (f.signal === 'wrong_vibe' || f.signal === 'never_again') {
+          excludeKeys.add(songKey(f.song_title, f.song_artist));
+        }
+      }
+      explorePool = await buildExplorePool({ seeds, excludeKeys, perSeedCap: 2, limit: 12 })
+        .catch(e => { console.warn('[explore] pool failed:', e.message); return []; });
+    }
+  }
 
   const userContent = userTpl
     .replace('{{USER_MESSAGE}}', userMessage)
@@ -227,9 +265,10 @@ export async function buildChatMessages({
     .replace('{{N_SONGS}}', String(retrieved.songs.length))
     .replace('{{N}}', String(n))
     .replace('{{LIBRARY_SLICE}}', fmtSongs(retrieved.songs))
-    .replace('{{RECOMMEND_POOL}}', recommendPool.length
-      ? recommendPool.map((s, i) => `${i + 1}. ${s.name} / ${s.artist}`).join('\n')
+    .replace('{{RECOMMEND_POOL}}', resolvedPool.length
+      ? resolvedPool.slice(0, 20).map((s, i) => `${i + 1}. ${s.name} / ${s.artist}`).join('\n')
       : '(暂无)')
+    .replace('{{EXPLORE_POOL}}', fmtExplorePool(explorePool))
     .replace('{{FEEDBACK_SLICE}}', fmtFeedbackRag(retrieved.feedback))
     .replace('{{TASTE_SLICE}}', fmtSnippets(retrieved.taste_snippets))
     .replace('{{LIFE_STAGE_SLICE}}', fmtSnippets(retrieved.life_stage_snippets))
@@ -238,7 +277,7 @@ export async function buildChatMessages({
     .replace('{{SEMANTIC_HISTORY}}', fmtSnippets(retrieved.semantic_history))
     .replace('{{ANTI_LIST}}', fmtSongList(antiList()))
     .replace('{{COOLDOWNS}}', fmtSongList(activeCooldowns()))
-    .replace('{{RECENT_PLAYS}}', fmtPlays(recentPlays(30)));
+    .replace('{{RECENT_PLAYS}}', fmtPlays(recentPlays(12)));
 
   // 多轮 messages: 把最近 5 轮 chat_turns 转成 user/assistant 对
   const turns = recentChatTurns(5);
@@ -246,15 +285,18 @@ export async function buildChatMessages({
   const messages = [];
   for (const t of chronological) {
     messages.push({ role: 'user', content: t.user_message });
-    // 把过去 DJ 的输出原样回放 (用最小 JSON 复原)
+    // 回放过去 DJ 输出,沿用 prose-then-JSON 契约:say 在前(纯文本),JSON 不含 say
     const assistantPayload = {
       intent: t.intent || 'chat',
-      say: t.dj_say || '',
       play: t.play_titles_json ? JSON.parse(t.play_titles_json).map(p => ({ title: p.title, artist: p.artist })) : [],
       queueAction: t.queue_action || null,
       feedback_extract: t.feedback_extract_json ? JSON.parse(t.feedback_extract_json) : null,
     };
-    messages.push({ role: 'assistant', content: '```json\n' + JSON.stringify(assistantPayload, null, 2) + '\n```' });
+    const sayEcho = (t.dj_say || '').trim();
+    messages.push({
+      role: 'assistant',
+      content: (sayEcho ? sayEcho + '\n\n' : '') + '```json\n' + JSON.stringify(assistantPayload) + '\n```',
+    });
   }
   messages.push({ role: 'user', content: userContent });
 

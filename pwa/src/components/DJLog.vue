@@ -26,6 +26,12 @@
           <template v-else-if="msg.kind === 'chat_reply'">
             <span class="chat-prompt">» </span>{{ displayText(i, msg) }}
           </template>
+          <template v-else-if="msg.kind === 'user'">
+            <span class="user-prompt">$ </span>{{ msg.text }}
+          </template>
+          <template v-else-if="msg.kind === 'stream'">
+            <span class="chat-prompt">» </span>{{ msg.text }}<span v-if="msg.id === streamingId" class="stream-caret">▋</span>
+          </template>
           <template v-else-if="msg.kind === 'reaction'">
             <span class="reaction-text">reacted: {{ msg.text }}</span>
           </template>
@@ -56,6 +62,7 @@ const props = defineProps({
   messages: Array,
   thinking: Boolean,
   stats: Object,
+  streamingId: [String, Number],
 });
 
 const logBody = ref(null);
@@ -140,6 +147,11 @@ watch(() => props.thinking, () => {
   maybeScrollToBottom();
 });
 
+// Scroll as the streamed bubble grows (text changes, length stays same)
+watch(() => props.messages[props.messages.length - 1]?.text, () => {
+  maybeScrollToBottom();
+});
+
 // Update latestTs
 const latestTs = ref('');
 watch(() => props.messages, (msgs) => {
@@ -161,6 +173,7 @@ function fmtTs(ts) {
 }
 
 function speakerLabel(msg) {
+  if (msg.kind === 'user') return ':USER';
   if (msg.kind === 'reaction') return ':USER';
   if (msg.kind === 'system') return ':SYSTEM';
   if (msg.kind === 'chat_reply') return ':NIGHTLINERFM';
@@ -168,23 +181,27 @@ function speakerLabel(msg) {
 }
 
 function speakerClass(msg) {
+  if (msg.kind === 'user') return 'speaker-user';
   if (msg.kind === 'reaction') return 'speaker-user';
   if (msg.kind === 'system') return 'system-label';
-  if (msg.kind === 'chat_reply') return 'speaker-chat';
+  if (msg.kind === 'chat_reply' || msg.kind === 'stream') return 'speaker-chat';
   return 'speaker-claude';
 }
 
 function msgSpeaker(msg) {
+  if (msg.kind === 'user') return 'user-msg';
   if (msg.kind === 'reaction') return 'user-msg';
   if (msg.kind === 'system') return 'system-msg';
   return 'claude-msg';
 }
 
 function bodyClass(msg) {
+  if (msg.kind === 'user') return 'user-body';
   if (msg.kind === 'reaction') return 'reaction-body';
   if (msg.kind === 'song') return 'song-body';
   if (msg.kind === 'system') return 'warn-text';
   if (msg.kind === 'chat_reply') return 'chat-reply-body';
+  if (msg.kind === 'stream') return 'stream-body';
   return '';
 }
 </script>
@@ -257,8 +274,17 @@ function bodyClass(msg) {
   opacity: 0.85;
 }
 .chat-reply-body { color: #7fb8e0; }
+.stream-body { color: var(--text); }
+.stream-caret {
+  color: var(--accent);
+  margin-left: 1px;
+  animation: caretBlink 1s steps(1) infinite;
+}
+@keyframes caretBlink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
 .cli-prompt { color: var(--text-dim); }
 .chat-prompt { color: #5b9bd5; }
+.user-prompt { color: var(--blue); }
+.user-body { color: var(--text); }
 .song-prefix { color: var(--accent); }
 .warn-text { color: var(--warn); }
 </style>

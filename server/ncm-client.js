@@ -78,6 +78,11 @@ export async function recommendSongs(limit = 20) {
   return ncmRequest('/recommend/songs', { limit });
 }
 
+// 网易云"相似歌曲"——给一个 ncm_id,返回它的相似歌列表(网易自己的协同/风格相似)
+export async function simiSong(id) {
+  return ncmRequest('/simi/song', { id });
+}
+
 export async function personalFm() {
   return ncmRequest('/personal_fm');
 }

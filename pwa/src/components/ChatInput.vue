@@ -1,14 +1,20 @@
 <template>
-  <form class="chat-pill" :class="{ focused }" @submit.prevent="onSubmit">
+  <form class="chat-pill" :class="{ focused, busy }" @submit.prevent="onSubmit">
     <input
       ref="inputEl"
       v-model="text"
-      :placeholder="placeholder"
+      :placeholder="busy ? 'DJ 正在回应…' : placeholder"
+      :disabled="busy"
       autocomplete="off"
       @focus="focused = true"
       @blur="focused = false"
     />
-    <button type="submit" class="send-btn" :disabled="!text.trim()">↗</button>
+    <button type="submit" class="send-btn" :disabled="!text.trim() || busy" aria-label="发送">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 19V5" />
+        <path d="M6 11l6-6 6 6" />
+      </svg>
+    </button>
   </form>
 </template>
 
@@ -21,6 +27,7 @@ const focused = ref(false);
 const placeholder = ref('');
 const inputEl = ref(null);
 const emit = defineEmits(['send', 'command']);
+const props = defineProps({ busy: Boolean });
 
 onMounted(() => {
   placeholder.value = pickGreeting();
@@ -28,7 +35,7 @@ onMounted(() => {
 
 function onSubmit() {
   const msg = text.value.trim();
-  if (!msg) return;
+  if (!msg || props.busy) return;
 
   // Slash commands — handle locally, don't send to LLM
   if (msg.startsWith('/')) {

@@ -193,3 +193,138 @@ export function extractJson(text) {
   const jsonStr = codeBlockMatch ? codeBlockMatch[1] : text;
   return JSON.parse(jsonStr.trim());
 }
+
+// prose-then-JSON 契约:fence 前的纯文本是 say,fence 内是结构化 JSON。
+// 容错:模型若直接吐 JSON(无 prose) → say='';若只有 prose(无 JSON) → intent=chat。
+export function splitSayAndJson(text) {
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]+?)```/);
+  if (fenceMatch) {
+    const say = text.slice(0, fenceMatch.index).trim();
+    let parsed;
+    try { parsed = JSON.parse(fenceMatch[1].trim()); } catch { parsed = { intent: 'chat' }; }
+    return { say, parsed };
+  }
+  const trimmed = text.trim();
+  if (trimmed.startsWith('{')) {
+    try { return { say: '', parsed: JSON.parse(trimmed) }; } catch {}
+  }
+  return { say: trimmed, parsed: { intent: 'chat' } };
+}
+
+// 流式输出 say(逐字)+ 末尾解析 JSON。
+// onSayDelta(deltaText) 仅在 ```` ``` ```` 代码块之前的 prose 区间被调用。
+// 返回 { fullText, say, parsed }。claude 无原生流式 → 退化为一次性调用后整段 emit。
+export async function callLlmStream({ system, messages, model, trigger, onSayDelta }) {
+  const t0 = Date.now();
+  let fullText = '';
+  let error = null;
+  const emitter = makeSayEmitter(onSayDelta);
+
+  try {
+    if (model.startsWith('deepseek-')) {
+      fullText = await streamOpenAICompatible({
+        url: 'https://api.deepseek.com/v1/chat/completions',
+        apiKey: requireEnv('DEEPSEEK_API_KEY'),
+        model, system, messages, onToken: t => emitter.push(t),
+      });
+    } else if (model.startsWith('qwen-')) {
+      fullText = await streamOpenAICompatible({
+        url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+        apiKey: requireEnv('DASHSCOPE_API_KEY'),
+        model, system, messages, onToken: t => emitter.push(t),
+      });
+    } else {
+      // claude-* 等无流式后端:整段拿回再一次性 emit say
+      fullText = await callLlm({ system, messages, model, trigger });
+      emitter.push(fullText);
+    }
+    emitter.finish();
+  } catch (e) {
+    error = String(e);
+    throw e;
+  } finally {
+    await logLlmCall({
+      model, trigger,
+      prompt: JSON.stringify({ system, messages }),
+      response: fullText,
+      duration_ms: Date.now() - t0,
+      error,
+    });
+  }
+
+  const { say, parsed } = splitSayAndJson(fullText);
+  return { fullText, say, parsed };
+}
+
+function requireEnv(name) {
+  const v = process.env[name];
+  if (!v) throw new Error(`${name} not set (check .env + npm script uses --env-file)`);
+  return v;
+}
+
+// 逐 token 累积,只把 fence 之前的 prose 当 say 往外吐。
+// HOLDBACK:无 fence 时保留末尾几字,避免把正在成形的 ``` 当作 say。
+// exported for unit testing of the streaming say/fence boundary.
+export function makeSayEmitter(onSayDelta) {
+  let full = '';
+  let emitted = 0;
+  const HOLDBACK = 3;
+  const flushTo = (boundary) => {
+    if (boundary > emitted) {
+      const delta = full.slice(emitted, boundary);
+      emitted = boundary;
+      if (delta && onSayDelta) onSayDelta(delta);
+    }
+  };
+  return {
+    push(token) {
+      if (!token) return;
+      full += token;
+      const fenceIdx = full.indexOf('```');
+      flushTo(fenceIdx >= 0 ? fenceIdx : Math.max(0, full.length - HOLDBACK));
+    },
+    finish() {
+      const fenceIdx = full.indexOf('```');
+      flushTo(fenceIdx >= 0 ? fenceIdx : full.length);
+    },
+  };
+}
+
+async function streamOpenAICompatible({ url, apiKey, model, system, messages, onToken }) {
+  const msgs = [];
+  if (system) msgs.push({ role: 'system', content: system });
+  msgs.push(...messages);
+
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, messages: msgs, temperature: 0.7, max_tokens: 8192, stream: true }),
+  });
+  if (!r.ok || !r.body) {
+    const text = await r.text().catch(() => '<no body>');
+    throw new Error(`${model} stream ${r.status}: ${text}`);
+  }
+
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let full = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nl;
+    while ((nl = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (data === '[DONE]') continue;
+      try {
+        const delta = JSON.parse(data).choices?.[0]?.delta?.content || '';
+        if (delta) { full += delta; onToken(delta); }
+      } catch { /* keep partial SSE frames for next read */ }
+    }
+  }
+  return full;
+}
