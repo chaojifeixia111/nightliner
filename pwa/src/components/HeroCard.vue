@@ -35,8 +35,8 @@
 
     <!-- Progress bar -->
     <div v-if="state.now" class="progress-wrap">
-      <span class="time-label">{{ fmtTime(currentSec) }}</span>
-      <div class="progress-track" @mousedown="onSeekStart" @touchstart.passive="onSeekStart">
+      <span class="time-label" :class="{ 'buf-pulse': buffering }">{{ fmtTime(currentSec) }}</span>
+      <div class="progress-track" :class="{ buffering }" @mousedown="onSeekStart" @touchstart.passive="onSeekStart">
         <div class="progress-fill" :style="{ width: progressPct + '%' }"></div>
         <div class="progress-thumb" :style="{ left: progressPct + '%' }"></div>
       </div>
@@ -131,9 +131,16 @@
       ref="audio"
       :src="state.now?.url"
       autoplay
+      preload="auto"
       @ended="onEnded"
       @timeupdate="onTimeUpdate"
       @loadedmetadata="onMeta"
+      @seeking="startBuffering"
+      @waiting="startBuffering"
+      @stalled="startBuffering"
+      @seeked="stopBuffering"
+      @playing="stopBuffering"
+      @canplay="stopBuffering"
     />
   </div>
 </template>
@@ -160,7 +167,7 @@ function updateClock() {
 
 let clockTimer;
 onMounted(() => { updateClock(); clockTimer = setInterval(updateClock, 1000); applyVolume(); });
-onUnmounted(() => clearInterval(clockTimer));
+onUnmounted(() => { clearInterval(clockTimer); clearTimeout(bufferTimer); });
 
 // Audio state
 const audio = ref(null);
@@ -180,6 +187,8 @@ const durationSec = ref(0);
 const progressPct = ref(0);
 let lastReportedSec = 0;
 let seeking = false;
+const buffering = ref(false);   // seek 后等待 CDN 重新缓冲时的观感指示
+let bufferTimer = null;
 
 // Feedback state
 const feedbackHovered = ref(false); // ❤ 上 hover 才显示 ×
@@ -213,10 +222,21 @@ function onMeta() {
   applyVolume();   // 每首歌加载时把音量落到元素上(autoplay 默认是 100%)
 }
 
+// seek / 卡顿后的"缓冲中"观感:只有卡顿超过 ~180ms 才显示,
+// 这样命中已缓冲区间的瞬时 seek 不会闪一下指示。
+function startBuffering() {
+  clearTimeout(bufferTimer);
+  bufferTimer = setTimeout(() => { buffering.value = true; }, 180);
+}
+function stopBuffering() {
+  clearTimeout(bufferTimer);
+  buffering.value = false;
+}
+
 function togglePlay() {
   if (!audio.value) return;
   if (audio.value.paused) { audio.value.play(); paused.value = false; }
-  else { audio.value.pause(); paused.value = true; }
+  else { audio.value.pause(); paused.value = true; stopBuffering(); }
 }
 
 function toggleMute() {
@@ -248,22 +268,31 @@ function onPrevious() {
   emit('previous');
 }
 
+// 从指针/触摸事件里算出在轨道上的比例 [0,1]
+function seekPctFromEvent(track, ev) {
+  const rect = track.getBoundingClientRect();
+  const clientX = ev.touches?.[0]?.clientX
+    ?? ev.changedTouches?.[0]?.clientX
+    ?? ev.clientX;
+  return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+}
+
 function onSeekStart(e) {
   if (!audio.value) return;
+  // 必须现在就把轨道元素存下来:e.currentTarget 在本次事件派发结束后会被浏览器置空,
+  // 延迟触发的 move/end(挂在 window 上)里再读 e.currentTarget 就是 null。
+  const track = e.currentTarget;
   seeking = true;
+  // 按下即跳:进度条立刻反映点击/按下位置
+  progressPct.value = seekPctFromEvent(track, e) * 100;
+
   const move = (ev) => {
-    const track = e.currentTarget;
-    const rect = track.getBoundingClientRect();
-    const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
-    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    progressPct.value = pct * 100;
+    progressPct.value = seekPctFromEvent(track, ev) * 100;
   };
   const end = (ev) => {
     seeking = false;
-    const track = e.currentTarget;
-    const rect = track.getBoundingClientRect();
-    const clientX = ev.changedTouches ? ev.changedTouches[0].clientX : ev.clientX;
-    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const pct = seekPctFromEvent(track, ev);
+    progressPct.value = pct * 100;
     if (audio.value && durationSec.value > 0) {
       audio.value.currentTime = pct * durationSec.value;
     }
@@ -284,6 +313,7 @@ watch(() => props.state.now?.title, (newTitle, oldTitle) => {
   durationSec.value = 0;
   progressPct.value = 0;
   paused.value = false;
+  stopBuffering();
 });
 
 function reportPlayEvent(reason, playedSec) {
@@ -494,6 +524,38 @@ function cancelDislike() {
   background: var(--accent);
   border: 1px solid var(--bg);
   pointer-events: none;
+  z-index: 2;   /* 保持在缓冲微光之上 */
+}
+
+/* Buffering:seek 命中未缓冲区间、等 CDN 回数据时的观感指示 */
+.progress-track.buffering::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(90deg, transparent 0%, rgba(74, 127, 219, 0.45) 50%, transparent 100%);
+  background-size: 45% 100%;
+  background-repeat: no-repeat;
+  animation: buf-sweep 1.1s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes buf-sweep {
+  0% { background-position: -45% 0; }
+  100% { background-position: 145% 0; }
+}
+.progress-track.buffering .progress-thumb {
+  animation: buf-thumb 1.1s ease-in-out infinite;
+}
+@keyframes buf-thumb {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 127, 219, 0); }
+  50% { box-shadow: 0 0 8px 2px rgba(74, 127, 219, 0.6); }
+}
+.time-label.buf-pulse {
+  animation: buf-label 1.1s ease-in-out infinite;
+}
+@keyframes buf-label {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; color: var(--accent); }
 }
 
 /* Controls row */
