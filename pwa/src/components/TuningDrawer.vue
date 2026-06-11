@@ -36,19 +36,6 @@
           />
         </div>
 
-        <div class="radio-group">
-          <div class="slider-label"><span>话密度</span></div>
-          <div class="radio-row">
-            <button
-              v-for="opt in ['low', 'medium', 'high']"
-              :key="opt"
-              class="radio-btn"
-              :class="{ active: local.chattiness === opt }"
-              @click="local.chattiness = opt"
-            >{{ opt }}</button>
-          </div>
-        </div>
-
       </div>
     </div>
   </transition>
@@ -179,29 +166,6 @@ const currentMode = computed(() => nearestMode(local.exploration_pct));
   cursor: pointer;
   border: 1px solid var(--bg);
   border-radius: 0;
-}
-.radio-group { display: flex; flex-direction: column; gap: 8px; }
-.radio-row { display: flex; gap: 8px; }
-.radio-btn {
-  flex: 1;
-  padding: 6px 0;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  cursor: pointer;
-  letter-spacing: 1px;
-  transition: all 0.15s;
-}
-.radio-btn.active {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--blue-glow);
-}
-.radio-btn:hover:not(.active) {
-  border-color: var(--accent-dim);
-  color: var(--text);
 }
 .drawer-enter-active, .drawer-leave-active { transition: transform 0.25s ease; }
 .drawer-enter-from, .drawer-leave-to { transform: translateX(100%); }
