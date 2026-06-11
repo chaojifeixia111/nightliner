@@ -1,8 +1,6 @@
 # Nightliner · 夜线电台
 
-> 翻出那些你已经忘了，但听到会确认"我以前真的爱过"的歌。
-
-一个跑在 `localhost:8080` 的本地 PWA，在网易云音乐之上做一层私人 AI DJ——决定播什么、为什么播、播完之后学到了什么。完全为单一用户私人订制，不通用化。
+一个跑在 `localhost:8080` 的本地 PWA，在网易云音乐之上做一层私人 AI DJ。
 
 技术栈：Node 20+（Express + ws，纯 JS / ESM）· Vue 3 + Vite · DeepSeek（流式）· BGE-M3 本地 embedding + sqlite-vec（RAG）· NeteaseCloudMusicApi。
 
