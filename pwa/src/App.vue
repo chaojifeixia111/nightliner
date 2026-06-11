@@ -50,7 +50,7 @@ const streamingId = ref(null);
 const state = reactive({
   now: null,
   queue: [],
-  tuning: { exploration_pct: 30, queue_length: 10, chattiness: 'medium' },
+  tuning: { exploration_pct: 30, queue_length: 10 },
 });
 
 let ws;

@@ -50,7 +50,6 @@ const emit = defineEmits(['close', 'change']);
 const local = reactive({
   exploration_pct: 30,
   queue_length: 10,
-  chattiness: 'medium',
 });
 
 // 只在抽屉打开、把后端值灌进 local 之后才允许上报,避免初始同步触发一次空 POST

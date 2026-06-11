@@ -47,10 +47,11 @@ const TUNING_PATH = 'data/tuning.json';
 let tuning = {
   exploration_pct: 30,
   queue_length: 10,
-  chattiness: 'medium',
 };
 try {
-  Object.assign(tuning, JSON.parse(readFileSync(TUNING_PATH, 'utf8')));
+  // 只取已知字段:旧存档里的废弃键(如 chattiness)在下次 persist 时自然消失
+  const saved = JSON.parse(readFileSync(TUNING_PATH, 'utf8'));
+  for (const k of Object.keys(tuning)) if (saved[k] !== undefined) tuning[k] = saved[k];
 } catch { /* 没有存档就用默认值 */ }
 
 function persistTuning() {
@@ -135,10 +136,9 @@ app.get('/api/tuning', (req, res) => res.json(tuning));
 
 // POST /api/tuning
 app.post('/api/tuning', (req, res) => {
-  const { exploration_pct, queue_length, chattiness } = req.body;
+  const { exploration_pct, queue_length } = req.body;
   if (exploration_pct !== undefined) tuning.exploration_pct = Number(exploration_pct);
   if (queue_length !== undefined) tuning.queue_length = Number(queue_length);
-  if (chattiness !== undefined) tuning.chattiness = chattiness;
   persistTuning();
   broadcast({ type: 'tuning', data: tuning });
   res.json({ ok: true, tuning });
