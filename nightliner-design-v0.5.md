@@ -7,7 +7,7 @@
 > - **本 v0.5 = 实际落地现状**,覆盖以上二者;凡有冲突**以代码为准**。
 > **平台**:Windows 11 开发(Node 20+,纯 JS,可无缝迁 Mac)。
 > **风格**:完全私人订制,为 Elliot 一人服务,不通用化。
-> **最后更新**:2026-05-30。
+> **最后更新**:2026-06-12。
 
 ---
 
@@ -22,7 +22,7 @@
 | 记忆/检索 | 无 | **RAG**:BGE-M3 本地 embedding + sqlite-vec 多路召回 |
 | 信号采集 | MediaRemote daemon(macOS 全 App) | **PWA 自身 `<audio>` 事件**(`/api/play-event`、`/api/skip`),精度 100% |
 | 运行模式 | 电台模式 + 对话模式 | **只有对话(chat)模式**;电台连播 / AppleScript 连续 queue 未建 |
-| 调音台 | v0.1 范围(后 v0.4 标"不做") | **已建**(TuningDrawer:探索档位 / queue 长度 / 话密度) |
+| 调音台 | v0.1 范围(后 v0.4 标"不做") | **已建**(TuningDrawer:探索档位 / queue 长度;话密度控件已移除,2026-06) |
 | 未建/放弃 | — | Profile 视图、consolidation pass、Last.fm、iTunes Search、MediaRemote daemon、mode chips、Apple privacy 冷启动、自动 life-stages 切分 |
 
 ---
@@ -46,7 +46,8 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   │
   1. 方向解析(direction.js)
   │    detectDirection(message, {artistNames}) → {langMatch, gender, artists}
-  │    新方向覆盖 currentDirection;"下一批/继续"沿用;其它消息清空
+  │    新方向覆盖;明确"随便/放开"清空(isOpenReset);纠正/追问/续批沿用(carriesDirection);
+  │    其余全新请求清空
   │
   2. getRecommendPool()(与 RAG 并行)
   │    网易云每日(daily 30)+ 2×personal_fm,按 id 去重,30min 缓存
@@ -63,7 +64,8 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   │    DeepSeek SSE 流式;fence(```) 之前的 prose 逐字 WS 推为 say;整段回来后 splitSayAndJson
   │
   5. repairFamiliarNew(align-batch.js)— 确定性对齐,不重试(零延迟)
-  │    先替换跨方向的歌(换成方向内候选);再按真实曲库把 familiar/new 数对齐到档位目标
+  │    跨方向的歌换成方向内候选(新→库内),换不到就丢弃(宁短勿偏,queue 可短);
+  │    familiar/new 硬对齐仅在无方向时执行(方向 turn 保留模型选曲与顺序)
   │
   6. checkReasonHallucination(budget-enforcer.js)— 启发式,命中 evidence 外细节则遮蔽 reason
   │
@@ -106,9 +108,9 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
 
 - **检测**:语种关键词(国语/中文/英文/韩语/日语…)+ 性别关键词(女声/男声)+ 点名艺人(匹配曲库艺人名)。
 - **`songLang(title)` 以歌名脚本判定**(title-primary):latin 标题 → english,**即使艺人含中文**。这是有意为之——把 "Sad Sometimes"(黄霄雲 feat. 的英文 EDM)排除出"国语",正是踩过的坑。代价:英文标题的粤语/国语歌会漏判(本库极少)。
-- **会话延续**:`currentDirection` 存在 index.js;新方向覆盖,"下一批/继续/再来…"沿用,其它消息清空(防方向卡死在旧请求上)。
+- **会话延续**:`currentDirection` 存在 index.js,4 分支判定——①新方向覆盖;②明确"随便/都行/放开"清空(`isOpenReset`);③纠正/追问("怎么又是X""第一首不是说放Y吗")与续批("下一批/继续")沿用上轮方向(`carriesDirection`);④其余全新请求清空(防方向卡死在旧请求上)。
 - **取数**:RAG 用方向词检索(而非空查询"下一批");库内从**全量收藏按方向随机采样**(每次不同 → 缓解"老推同几首");recommend / explore 池都按方向过滤;explore 种子取方向内收藏曲(→ simi 近邻 + 同艺人深挖天然在方向内)。
-- **比例让位**:方向内「全新」供给不足 → 降 `newTarget`、升 `famTarget`(多给方向内库内歌),**绝不用跨方向歌凑数,绝不谎报语种**。
+- **宁短勿偏**(2026-06,取代早期"比例让位"):跑偏方向的歌优先换成方向内候选(新→库内),候选枯竭则**直接丢弃**——queue 可以短,**绝不用跨方向歌凑满,绝不谎报语种**。方向 turn 不再硬对齐 familiar/new 比例(保留模型选曲与顺序,让"第一首放 X"生效),档位目标仅作 prompt 软引导。
 - **server 只保证语种**(脚本启发式);**性别 / 风格交给 LLM**(歌名/艺人名无法可靠判定性别)。一首中文男声可能溜进"女声"请求——可接受,急性的英文乱入已根治。
 - 详见 memory: `project_direction_hard_constraint.md`。
 
@@ -197,7 +199,7 @@ POST /api/chat               用户输入(异步,结果走 WS 流)
 GET  /api/now                当前 now-playing
 GET  /api/queue              当前 queue
 GET  /api/tuning             读调音台
-POST /api/tuning             写调音台(exploration_pct / queue_length / chattiness)→ 持久化 + 广播
+POST /api/tuning             写调音台(exploration_pct / queue_length)→ 持久化 + 广播
 POST /api/feedback           4 键反馈(title, artist, signal, reason?)
 POST /api/play-event         播放结束事件(ended_reason=natural 时自动进下一首)
 POST /api/skip               显式跳过(记 user_skip)
@@ -220,7 +222,7 @@ WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `
 |---|---|
 | `App.vue` | WS 连接 + 状态根 + 事件分发(onFeedback/onSkip/…) |
 | `HeroCard.vue` | 封面 / 歌名 / 进度 / `<audio>` 控制 / **音量持久化(localStorage `nl_volume`,默认 33)** / ❤ 常驻 + hover 出 × 反馈面板 |
-| `TuningDrawer.vue` | **调音台**:探索档位(5 档吸附滑块,显示英文名)/ Queue 长度 / 话密度 |
+| `TuningDrawer.vue` | **调音台**:探索档位(5 档吸附滑块,显示英文名)/ Queue 长度 |
 | `QueueDrawer.vue` | queue 预览 |
 | `ChatInput.vue` | 底部常驻输入 |
 | `DJLog.vue` | DJ 流式气泡(逐字)+ 系统消息 |
