@@ -3,16 +3,18 @@ node_modules/
 logs/
 *.err
 *.out
-data/state.db
-data/state.db-journal
-data/llm-calls.jsonl
-data/netease-cookie.txt
-data/netease-snapshot.json
+*.err.new
+*.out.new
+server-err.txt
+server-out.txt
+# 运行时数据整体不入库(state.db/WAL、tuning.json、llm 日志、网易云 cookie/快照/二维码)
+data/
 pwa/dist/
 .env
 .DS_Store
 Thumbs.db
+.superpowers/
+.claude/
 
 # 用户灵魂文件 - 不进版本控制(隐私边界)
 user/
-data/netease-qr.png
