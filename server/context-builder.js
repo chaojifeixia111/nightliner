@@ -375,12 +375,8 @@ export async function buildChatMessages({
     }
   }
 
-  // 方向激活、且方向内「全新」供给不足 → 比例让位:少给全新、多给方向内库内歌,
-  // 绝不用跑偏方向的歌凑 newTarget(这正是之前英文乱入 + 谎报语种的根因)。
-  if (direction) {
-    const inDirNewSupply = explorePool.length + dirRecommend.length;
-    if (inDirNewSupply < newTarget) { newTarget = inDirNewSupply; famTarget = n - newTarget; }
-  }
+  // 有方向时不再上调 famTarget:repair 已不在方向 turn 强对齐 familiar/new,
+  // famTarget/newTarget 保持档位值,仅作 prompt 软引导(模型自行在方向内把握熟/新)。
 
   const userContent = userTpl
     .replace('{{USER_MESSAGE}}', userMessage)

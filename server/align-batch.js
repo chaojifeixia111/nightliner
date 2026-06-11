@@ -42,48 +42,51 @@ export function repairFamiliarNew(plays, meta) {
     memoryLink: null, confidence: 0.5, source_preference: 'netease', source_pool: pool,
   });
 
-  // ── 第一步:方向硬约束。把跑偏方向的歌换成方向内候选(优先全新,其次库内)。
+  // ── 第一步:方向硬约束。跑偏方向的歌:优先换成方向内候选(新→库内),都没有就**丢弃**。
+  // 丢弃而非保留 → 当 queue 长度 > 该方向可用曲数时,给一批「短但全在方向内」的歌,
+  // 而不是用跑偏方向的歌把 queue 凑满(用户要 Gryffin 就只给 Gryffin,宁短勿偏)。
   if (direction) {
-    for (let i = 0; i < plays.length; i++) {
-      if (matchesDir(plays[i].title, plays[i].artist)) continue;
+    const kept = [];
+    for (const p of plays) {
+      if (matchesDir(p.title, p.artist)) { kept.push(p); continue; }
       let c = newCands.shift();
-      let pool, reason;
       if (c) {
-        pool = c.kind === 'deepcut' ? 'wildcard' : 'recommend';
-        reason = reasonNew(c);
+        kept.push(mk(c, c.kind === 'deepcut' ? 'wildcard' : 'recommend', reasonNew(c)));
+        usedKeys.add(songKey(c.title, c.artist)); offDir++; repaired++;
       } else if (libCands.length) {
         c = libCands.shift();
-        pool = 'library';
-        reason = '你收藏里符合该方向的,替掉跑偏方向的那首';
+        kept.push(mk(c, 'library', '你收藏里符合该方向的,替掉跑偏方向的那首'));
+        usedKeys.add(songKey(c.title, c.artist)); offDir++; repaired++;
       } else {
-        break;  // 方向内候选枯竭 → 尽力而为,剩下的留给模型原样(极少见)
+        offDir++; repaired++;  // 方向内候选枯竭 → 丢弃这首跑偏的(不 push)
       }
-      plays[i] = mk(c, pool, reason);
-      usedKeys.add(songKey(c.title, c.artist));
-      offDir++; repaired++;
     }
+    plays.splice(0, plays.length, ...kept);  // 原地替换内容,保持调用方的数组引用
   }
 
-  // ── 第二步:familiar↔new 比例对齐(在方向内候选之间换;候选不够时不硬凑)。
+  // ── 第二步:familiar↔new 比例硬对齐 —— **仅在「无方向」的开放推荐时执行**。
+  // 有方向时:模型的方向内选曲已证明可靠,一律保留,不为凑库内/全新比例换掉它们,
+  // 也保留顺序(让「第一首放 X」生效)。此时比例只由 prompt + 候选池软引导。
   let familiar = plays.filter(inLib).length;
-
-  // 库内太多 → 把多出来的库内歌换成全新候选
-  while (familiar > famTarget && newCands.length) {
-    const idx = plays.findIndex(inLib);
-    if (idx < 0) break;
-    const c = newCands.shift();
-    plays[idx] = mk(c, c.kind === 'deepcut' ? 'wildcard' : 'recommend', reasonNew(c));
-    usedKeys.add(songKey(c.title, c.artist));
-    familiar--; repaired++;
-  }
-  // 库内太少 → 把多出来的全新歌换成库内候选
-  while (familiar < famTarget && libCands.length) {
-    const idx = plays.findIndex(p => !inLib(p));
-    if (idx < 0) break;
-    const c = libCands.shift();
-    plays[idx] = mk(c, 'library', '你收藏里的,对齐熟悉比例换上');
-    usedKeys.add(songKey(c.title, c.artist));
-    familiar++; repaired++;
+  if (!direction) {
+    // 库内太多 → 把多出来的库内歌换成全新候选
+    while (familiar > famTarget && newCands.length) {
+      const idx = plays.findIndex(inLib);
+      if (idx < 0) break;
+      const c = newCands.shift();
+      plays[idx] = mk(c, c.kind === 'deepcut' ? 'wildcard' : 'recommend', reasonNew(c));
+      usedKeys.add(songKey(c.title, c.artist));
+      familiar--; repaired++;
+    }
+    // 库内太少 → 把多出来的全新歌换成库内候选
+    while (familiar < famTarget && libCands.length) {
+      const idx = plays.findIndex(p => !inLib(p));
+      if (idx < 0) break;
+      const c = libCands.shift();
+      plays[idx] = mk(c, 'library', '你收藏里的,对齐熟悉比例换上');
+      usedKeys.add(songKey(c.title, c.artist));
+      familiar++; repaired++;
+    }
   }
 
   return { repaired, familiar, before, newCount: plays.length - familiar, offDir };

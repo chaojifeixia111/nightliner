@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { buildChatMessages, libraryArtistNames } from './context-builder.js';
 import { repairFamiliarNew } from './align-batch.js';
-import { detectDirection, isContinuation, describeDirection } from './direction.js';
+import { detectDirection, carriesDirection, isOpenReset, describeDirection } from './direction.js';
 import { callLlm, extractJson, callLlmStream } from './llm-adapter.js';
 import { resolvePlayList } from './playback-coordinator.js';
 import { recordFeedback, recordPlay, recordQueue, recordChatTurn, recentChatTurns, antiList, activeCooldowns, feedbackStats } from './state-db.js';
@@ -167,10 +167,18 @@ app.post('/api/chat', async (req, res) => {
   };
 
   try {
-    // 方向解析:新方向覆盖;"下一批/继续" 沿用上一轮;其它消息清空(避免方向卡死在旧请求上)
+    // 方向解析:新方向覆盖;明确放开则清空;纠正/追问/续批沿用上一轮;否则(全新请求)清空。
+    // 关键:用户纠正上一批("怎么又是X""第一首不是说放Y吗")要沿用方向,别把锁清掉。
     const detected = detectDirection(message, { artistNames: await libraryArtistNames() });
-    if (detected) currentDirection = detected;
-    else if (!(isContinuation(message) && currentDirection)) currentDirection = null;
+    if (detected) {
+      currentDirection = detected;                                   // 新方向覆盖
+    } else if (isOpenReset(message)) {
+      currentDirection = null;                                       // 明确放开 → 开放推荐
+    } else if (currentDirection && carriesDirection(message)) {
+      /* 纠正 / 追问 / 续批 → 沿用上一轮方向 */
+    } else {
+      currentDirection = null;                                       // 全新的请求 → 清空
+    }
     if (currentDirection) console.log(`[chat] 方向=${describeDirection(currentDirection)}${detected ? '' : ' (沿用上轮)'}`);
 
     const recommendPoolP = getRecommendPool(); // 与 RAG 检索并行,buildChatMessages 内部 await

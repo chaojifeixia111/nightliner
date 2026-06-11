@@ -47,6 +47,20 @@ export function isContinuation(message) {
   return CONTINUATION.test(message || '');
 }
 
+// 纠正/追问/refine 信号:用户在批评或修正上一批,仍在当前方向语境内 → 应沿用方向
+const CORRECTION = /(不是|不对|又是|又给|怎么|为什么|为啥|错了|搞错|说过|说的是|明明|重新|重来|还是|第一首|刚才|上一|按我说|我让你|我说的|不要再|别再|不要给|别给)/i;
+
+// 是否应沿用上一轮方向(连续指令 或 纠正/追问)。fresh 的新请求两者都不命中 → 清空方向。
+export function carriesDirection(message) {
+  return CONTINUATION.test(message || '') || CORRECTION.test(message || '');
+}
+
+// 明确「放开/重置」方向:回到开放推荐(优先级高于沿用)
+const OPEN_RESET = /(随便|都行|随意|无所谓|不限|任意|啥都|什么都|换个口味|换种风格|换个方向|别限定|不要限定|放开)/;
+export function isOpenReset(message) {
+  return OPEN_RESET.test(message || '');
+}
+
 /**
  * 从用户消息检测「方向」。检测不到(纯开放式/纯风格情绪)返回 null。
  * @param {string} message
@@ -145,6 +159,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   A(songMatchesDirection('寂寞寂寞就好', '田馥甄', dir) === true, 'match 寂寞寂寞就好 in chinese');
   A(songMatchesDirection('Sad Sometimes', 'Alan Walker / 黄霄雲', dir) === false, 'reject Sad Sometimes (latin title) in chinese');
   A(songMatchesDirection('Where To Start', 'Vincentz', dir) === false, 'reject Where To Start in chinese');
+
+  A(carriesDirection('怎么又是feel good，不是让你第一首放safe with me吗'), 'correction → carries direction');
+  A(carriesDirection('下一批'), 'continuation → carries direction');
+  A(!carriesDirection('推荐几首晚上的'), 'fresh request → does NOT carry (clears)');
+  A(isOpenReset('随便来点都行'), 'open/reset detected');
+  A(!isOpenReset('放点孙燕姿'), 'artist request is not a reset');
 
   console.log('direction:', describeDirection(d1));
 }
