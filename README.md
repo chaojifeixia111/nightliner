@@ -1,6 +1,6 @@
 # Nightliner · 夜线电台
 
-一个跑在 `localhost:8080` 的本地 PWA，在网易云音乐之上做一层私人 AI DJ。
+充分蒸馏了我的听歌偏好的私人 AI DJ。
 
 技术栈：Node 20+（Express + ws，纯 JS / ESM）· Vue 3 + Vite · DeepSeek（流式）· BGE-M3 本地 embedding + sqlite-vec（RAG）· NeteaseCloudMusicApi。
 
