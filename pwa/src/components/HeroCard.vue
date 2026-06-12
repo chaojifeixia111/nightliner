@@ -338,7 +338,11 @@ function cancelDislike() {
 .cover-wrap::before {
   content: '';
   position: absolute;
-  inset: -48px;
+  top: 50%;
+  left: 50%;
+  width: 380px;
+  height: 380px;
+  transform: translate(-50%, -50%);
   background: radial-gradient(circle, var(--ambient-glow), transparent 70%);
   pointer-events: none;
 }
