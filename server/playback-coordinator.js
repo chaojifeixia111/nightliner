@@ -166,8 +166,9 @@ export async function resolveById({ ncm_id, title, artist }) {
 
     return { title, artist, ncm_id, url, pic_url, duration_ms, ncm_name, ncm_artist, found: true };
   } catch (e) {
+    // 网络/NCM 5xx 等瞬时错误 ≠ 无版权:单独标 error,前端文案区分"重试"和"放弃"
     console.warn(`[playback] resolveById ${ncm_id} 失败: ${e.message}`);
-    return { title, artist, ncm_id, found: false, reason: 'unplayable' };
+    return { title, artist, ncm_id, found: false, reason: 'error' };
   }
 }
 

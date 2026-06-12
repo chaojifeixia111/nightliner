@@ -9,12 +9,14 @@ import { buildChatMessages, libraryArtistNames } from './context-builder.js';
 import { repairFamiliarNew } from './align-batch.js';
 import { detectDirection, carriesDirection, isOpenReset, describeDirection } from './direction.js';
 import { callLlm, extractJson, callLlmStream } from './llm-adapter.js';
-import { resolvePlayList } from './playback-coordinator.js';
+import { resolvePlayList, resolveById } from './playback-coordinator.js';
 import { recordFeedback, recordPlay, recordQueue, recordChatTurn, recentChatTurns, antiList, activeCooldowns, feedbackStats } from './state-db.js';
-import { recommendSongs, personalFm } from './ncm-client.js';
+import { recommendSongs, personalFm, cloudsearch, searchArtists, artistTopSongs } from './ncm-client.js';
 import { warmup } from './embedder.js';
 import { indexAllSongs, indexAllFeedback, indexAllChatTurns, indexMdFile } from './indexer.js';
 import { checkReasonHallucination } from './budget-enforcer.js';
+import { normalizeSearchSongs, normalizeSearchArtists, normalizeArtistSongs } from './search-normalize.js';
+import { playNow, enqueue } from './queue-ops.js';
 
 const config = yaml.parse(await fs.readFile('config.yaml', 'utf8'));
 const PORT = config.server.port;
@@ -71,18 +73,24 @@ async function getRecommendPool() {
     return recommendCache.songs;
   }
   const byId = new Map();
-  const add = (s) => {
+  const add = (s, src) => {
     if (!s || s.id == null || !s.name) return;
     if (byId.has(s.id)) return;
-    byId.set(s.id, { name: s.name, artist: (s.ar || s.artists || []).map(a => a.name).join(' / '), ncm_id: s.id });
+    byId.set(s.id, {
+      name: s.name,
+      artist: (s.ar || s.artists || []).map(a => a.name).join(' / '),
+      ncm_id: s.id,
+      pic_url: s.al?.picUrl || s.album?.picUrl || null,  // DAILY 整版页要封面;DJ prompt 只取 name/artist 不受影响
+      src,                                               // 'daily' | 'fm':/api/recommend 只取 daily
+    });
   };
   try {
     const data = await recommendSongs(30);
-    for (const s of (data?.data?.dailySongs || [])) add(s);
+    for (const s of (data?.data?.dailySongs || [])) add(s, 'daily');
     // 叠加 personal_fm:每次返回不同的几首 → 给推荐池注入会轮换的新鲜血液(抓两次拿更多)
     const fmResults = await Promise.allSettled([personalFm(), personalFm()]);
     for (const r of fmResults) {
-      if (r.status === 'fulfilled') for (const s of (r.value?.data || [])) add(s);
+      if (r.status === 'fulfilled') for (const s of (r.value?.data || [])) add(s, 'fm');
     }
     const songs = [...byId.values()];
     if (songs.length) {
@@ -469,6 +477,79 @@ app.post('/api/previous', (req, res) => {
   now = playHistory.pop();
   broadcast({ type: 'now', data: now });
   res.json({ ok: true, now });
+});
+
+// ---- 手动浏览/点播(DAILY / SEARCH 整版页)----
+
+// GET /api/recommend — 今日每日推荐(带封面)。池子是 daily+fm 混合,这里只取 daily;
+// daily 拉不到(cookie 过期等)时退回整池,聊胜于无。
+app.get('/api/recommend', async (req, res) => {
+  const pool = await getRecommendPool();
+  const daily = pool.filter(s => s.src === 'daily');
+  res.json({ songs: daily.length ? daily : pool });
+});
+
+// GET /api/search?q=&type=song|artist&limit=20
+app.get('/api/search', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  const type = req.query.type === 'artist' ? 'artist' : 'song';
+  const limit = Math.min(Number(req.query.limit) || 20, 30);
+  if (!q) return res.json(type === 'artist' ? { artists: [] } : { songs: [] });
+  try {
+    if (type === 'artist') {
+      const r = await searchArtists(q, { limit });
+      return res.json({ artists: normalizeSearchArtists(r) });
+    }
+    const r = await cloudsearch(q, { limit });
+    res.json({ songs: normalizeSearchSongs(r) });
+  } catch (e) {
+    console.warn('[search] failed:', e.message);
+    res.status(502).json({ error: 'search_failed' });
+  }
+});
+
+// GET /api/artist/songs?id= — 某歌手热门曲
+app.get('/api/artist/songs', async (req, res) => {
+  const id = req.query.id;
+  if (!id) return res.status(400).json({ error: 'id required' });
+  try {
+    const r = await artistTopSongs(id);
+    res.json({ songs: normalizeArtistSongs(r) });
+  } catch (e) {
+    console.warn('[artist/songs] failed:', e.message);
+    res.status(502).json({ error: 'artist_songs_failed' });
+  }
+});
+
+// POST /api/play — 手动点播 { title, artist, ncm_id?, mode: 'now'|'queue' }
+// 不校验 anti/cooldown:用户明确点了就尊重。play-event 仍由前端 audio 照常上报。
+app.post('/api/play', async (req, res) => {
+  const { title, artist, ncm_id, mode } = req.body;
+  if (!title && ncm_id == null) return res.status(400).json({ error: 'title or ncm_id required' });
+  try {
+    const resolved = ncm_id != null
+      ? await resolveById({ ncm_id, title, artist })
+      : (await resolvePlayList([{ title, artist }]))[0];
+
+    if (!resolved?.found) {
+      return res.json({ ok: false, reason: resolved?.reason || 'not_found' });
+    }
+
+    if (mode === 'queue') {
+      const r = enqueue(currentQueue, now, resolved);
+      currentQueue = r.queue; now = r.now;
+    } else {
+      const r = playNow(currentQueue, now, resolved);
+      currentQueue = r.queue; now = r.now;
+    }
+    recordQueue({ mode: 'manual', songs: currentQueue });
+    broadcast({ type: 'queue', data: currentQueue });
+    broadcast({ type: 'now', data: now });
+    res.json({ ok: true, song: resolved });
+  } catch (e) {
+    console.error('[play] error:', e);
+    res.status(500).json({ ok: false, reason: 'error' });
+  }
 });
 
 // GET /api/state/* — transparency endpoints for slash commands
