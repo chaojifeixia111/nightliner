@@ -1,6 +1,12 @@
 <template>
   <div class="app-shell">
-    <AppHeader :connected="connected" :playing="playing" @open-tuning="tuningOpen = true" @open-queue="queueOpen = true" />
+    <AppHeader
+      :connected="connected" :playing="playing"
+      @open-tuning="tuningOpen = true"
+      @open-queue="queueOpen = true"
+      @open-daily="openDiscover(false)"
+      @open-search="openDiscover(true)"
+    />
     <HeroCard
       :state="state"
       @feedback="onFeedback"
@@ -25,6 +31,12 @@
       :now="state.now"
       @close="queueOpen = false"
     />
+    <DiscoverPage
+      :open="discoverOpen"
+      :focus-search="discoverFocusSearch"
+      :now="state.now"
+      @close="discoverOpen = false"
+    />
   </div>
 </template>
 
@@ -36,11 +48,19 @@ import DJLog from './components/DJLog.vue';
 import ChatInput from './components/ChatInput.vue';
 import TuningDrawer from './components/TuningDrawer.vue';
 import QueueDrawer from './components/QueueDrawer.vue';
+import DiscoverPage from './components/DiscoverPage.vue';
 import { connectWs, sendFeedback } from './ws-client.js';
 
 const connected = ref(false);
 const tuningOpen = ref(false);
 const queueOpen = ref(false);
+const discoverOpen = ref(false);
+const discoverFocusSearch = ref(false);
+
+function openDiscover(focusSearch) {
+  discoverFocusSearch.value = focusSearch;
+  discoverOpen.value = true;
+}
 const thinking = ref(false);
 const playing = ref(false);
 const djMessages = ref([]);
@@ -172,7 +192,7 @@ function onCommand({ cmd, args }) {
     case '?':
       pushDjMessage({
         ts, kind: 'system',
-        text: '/clear          清空对话\n/help /?        显示命令\n/tuning         打开调音台\n/queue          打开队列\n/anti           查看 anti-list\n/cooldown       查看 cooldown 列表\n/history        查看最近对话历史\n/stats          查看反馈统计',
+        text: '/clear          清空对话\n/help /?        显示命令\n/daily          打开每日推荐\n/search         打开搜索\n/tuning         打开调音台\n/queue          打开队列\n/anti           查看 anti-list\n/cooldown       查看 cooldown 列表\n/history        查看最近对话历史\n/stats          查看反馈统计',
       });
       break;
     case 'tuning':
@@ -180,6 +200,12 @@ function onCommand({ cmd, args }) {
       break;
     case 'queue':
       queueOpen.value = true;
+      break;
+    case 'daily':
+      openDiscover(false);
+      break;
+    case 'search':
+      openDiscover(true);
       break;
     case 'anti':
     case 'antilist':

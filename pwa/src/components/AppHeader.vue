@@ -6,6 +6,8 @@
         <transition name="fade">
           <span v-if="playing" class="on-air">ON AIR</span>
         </transition>
+        <button class="nav-link" @click="$emit('open-daily')">DAILY</button>
+        <button class="nav-link" @click="$emit('open-search')">SEARCH</button>
         <button class="nav-link" @click="$emit('open-queue')">QUEUE</button>
         <button class="nav-link" @click="$emit('open-tuning')">TUNING</button>
       </div>
@@ -19,7 +21,7 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 
 defineProps({ connected: Boolean, playing: Boolean });
-defineEmits(['open-tuning', 'open-queue']);
+defineEmits(['open-tuning', 'open-queue', 'open-daily', 'open-search']);
 
 const DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -98,5 +100,22 @@ onUnmounted(() => clearInterval(timer));
   font-size: 10px;
   letter-spacing: 1.5px;
   color: var(--negative);
+}
+
+/* 窄屏:4 个导航 + ON AIR 挤不下一行 → 缩字距、ON AIR 退化成呼吸金点 */
+@media (max-width: 480px) {
+  .wordmark { font-size: 15px; }
+  .mast-actions { gap: 10px; }
+  .nav-link { font-size: 10px; letter-spacing: 1px; }
+  .on-air {
+    font-size: 0;
+    letter-spacing: 0;
+    padding: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--gold);
+    border: none;
+  }
 }
 </style>

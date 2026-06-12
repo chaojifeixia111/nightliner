@@ -164,7 +164,9 @@ function flashToast(msg) {
   toastTimer = setTimeout(() => { toast.value = ''; }, 2500);
 }
 
+// NCM 解析常要 2-3s:点击先给 pending 提示,免得看起来没反应
 async function onPlay(s) {
+  flashToast(`Playing — ${s.name}…`);
   const r = await playSong(s, 'now');
   if (!r.ok) {
     flashToast(r.reason === 'unplayable'
@@ -176,6 +178,7 @@ async function onPlay(s) {
 }
 
 async function onQueue(s) {
+  flashToast(`Queuing — ${s.name}…`);
   const r = await playSong(s, 'queue');
   flashToast(r.ok ? `Queued — ${s.name}` : "Can't queue this one — try again.");
 }
