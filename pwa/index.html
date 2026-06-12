@@ -6,44 +6,50 @@
   <title>NightlinerFM</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=VT323&family=JetBrains+Mono:wght@300;400;500&family=Press+Start+2P&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet" />
   <style>
     :root {
-      /* primary: white — for "live / now / focus" elements */
-      --accent: #f4f7fc;
-      --accent-dim: #aab4c8;
+      /* night-issue tokens (spec §2) */
+      --ink-0: #131110;
+      --ink-1: #1b1916;
+      --ink-2: #2c2823;
+      --paper-0: #f3ead9;
+      --paper-1: #ded5c6;
+      --paper-2: #cabfae;
+      --paper-3: #9b9184;
+      --paper-4: #6e6357;
+      --gold: #c2a36b;
+      --negative: #c1573f;
+      --rule: #5a5046;
+      --ambient-glow: rgba(194, 163, 107, 0.14); /* JS 取色成功后被覆盖 */
 
-      /* atmosphere: deep blue — panels, borders, glow */
-      --bg: #070b14;
-      --panel: #0d1322;
-      --panel-2: #111a2e;
-      --border: #1c2a4a;
-      --border-soft: #14203a;
+      --font-serif: 'Noto Serif SC', 'Source Han Serif SC', 'STSong', serif;
+      --font-sans: -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      --font-mono: 'JetBrains Mono', Consolas, monospace;
 
-      /* text */
-      --text: #dde4f0;
-      --text-dim: #6b7894;
-
-      /* atmospheric blue accent (used sparingly: badges, progress fill, hover glow) */
-      --blue: #4a7fdb;
-      --blue-dim: #2c4a85;
-      --blue-glow: rgba(74, 127, 219, 0.18);
-
-      --warn: #d4a64f;
+      /* legacy aliases — 仅为未换装组件过渡，Task 12 删除 */
+      --bg: var(--ink-0);
+      --panel: var(--ink-1);
+      --panel-2: var(--ink-1);
+      --border: var(--ink-2);
+      --border-soft: var(--ink-2);
+      --accent: var(--paper-0);
+      --accent-dim: var(--paper-2);
+      --text: var(--paper-1);
+      --text-dim: var(--paper-3);
+      --blue: var(--gold);
+      --blue-dim: var(--rule);
+      --blue-glow: rgba(194, 163, 107, 0.15);
+      --warn: var(--negative);
     }
 
     * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      font-family: 'JetBrains Mono', monospace;
-      background-color: var(--bg);
-      background-image:
-        radial-gradient(ellipse 80% 50% at 50% 0%, var(--blue-glow), transparent 60%),
-        radial-gradient(circle, #1a2235 1px, transparent 1px);
-      background-size: auto, 24px 24px;
-      background-repeat: no-repeat, repeat;
-      color: var(--text);
+      font-family: var(--font-serif);
+      background: var(--ink-0);
+      color: var(--paper-1);
       height: 100vh;
       overflow: hidden;        /* 页面不滚动,所有滚动发生在 DJLog 内部 */
     }
@@ -57,8 +63,7 @@
       flex-direction: column;
     }
 
-    /* selection */
-    ::selection { background: var(--blue-dim); color: var(--accent); }
+    ::selection { background: var(--rule); color: var(--paper-0); }
   </style>
 </head>
 <body>
