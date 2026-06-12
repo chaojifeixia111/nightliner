@@ -3,13 +3,13 @@
     <div v-if="open" class="drawer-overlay" @click.self="$emit('close')">
       <div class="drawer">
         <div class="drawer-header">
-          <span class="drawer-title">┌─ QUEUE ({{ queue?.length || 0 }} tracks) ─┐</span>
-          <button class="close-btn" @click="$emit('close')">✕</button>
+          <span class="drawer-title">QUEUE — {{ queue?.length || 0 }} TRACKS</span>
+          <button class="close-btn" @click="$emit('close')"><Icon name="x" :size="14" /></button>
         </div>
 
         <div class="queue-body">
           <div v-if="!queue || queue.length === 0" class="empty">
-            ( queue empty · chat to start )
+            Queue is empty — ask for something
           </div>
           <div v-else class="queue-list">
             <div
@@ -32,6 +32,8 @@
 </template>
 
 <script setup>
+import Icon from './Icon.vue';
+
 const props = defineProps({
   open: Boolean,
   queue: Array,
@@ -62,8 +64,8 @@ function skipTo(song) {
   justify-content: flex-end;
 }
 .drawer {
-  background: var(--panel);
-  border-left: 1px solid var(--border);
+  background: var(--ink-1);
+  border-left: 1px solid var(--ink-2);
   width: 320px;
   max-width: 90vw;
   height: 100%;
@@ -79,75 +81,30 @@ function skipTo(song) {
   justify-content: space-between;
   flex-shrink: 0;
 }
-.drawer-title {
-  font-size: 11px;
-  color: var(--text-dim);
-  letter-spacing: 1px;
-}
+.drawer-title { font-family: var(--font-sans); font-size: 10px; letter-spacing: 2px; color: var(--paper-3); }
 .close-btn {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.15s, border-color 0.15s;
+  background: none; border: none; color: var(--paper-3);
+  width: 28px; height: 28px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: color 0.18s;
 }
-.close-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+.close-btn:hover { color: var(--paper-0); }
 
 .queue-body { flex: 1; overflow-y: auto; }
-.empty {
-  font-size: 12px;
-  color: var(--text-dim);
-  padding: 8px 0;
-}
+.empty { font-size: 12px; color: var(--paper-4); padding: 8px 0; font-family: var(--font-sans); }
 .queue-list { display: flex; flex-direction: column; gap: 2px; }
 .queue-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 8px;
-  font-size: 12px;
-  color: var(--text-dim);
-  cursor: pointer;
-  transition: background 0.1s;
-  border-left: 3px solid transparent;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; font-size: 13px; color: var(--paper-3);
+  cursor: pointer; transition: background 0.1s;
+  border-left: 2px solid transparent;
 }
-.queue-row:hover { background: rgba(74, 127, 219, 0.08); }
-.queue-row.current {
-  background: var(--blue-glow);
-  border-left-color: var(--accent);
-  color: var(--accent);
-  box-shadow: inset 0 0 24px rgba(74, 127, 219, 0.08);
-}
-.idx {
-  font-size: 10px;
-  min-width: 22px;
-  opacity: 0.6;
-  flex-shrink: 0;
-}
-.song-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.song-artist {
-  font-size: 11px;
-  color: var(--text-dim);
-  text-align: right;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  opacity: 0.7;
-  flex-shrink: 0;
-}
-.queue-row.current .song-artist { color: var(--accent); }
+.queue-row:hover { background: rgba(194, 163, 107, 0.07); }
+.queue-row.current { background: none; border-left-color: var(--gold); color: var(--gold); box-shadow: none; }
+.idx { font-family: var(--font-mono); font-size: 10px; min-width: 22px; color: var(--paper-4); flex-shrink: 0; }
+.song-name { font-family: var(--font-serif); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.song-artist { font-family: var(--font-sans); font-size: 11px; color: var(--paper-4); text-align: right; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+.queue-row.current .song-artist { color: var(--gold); }
 
 .drawer-enter-active, .drawer-leave-active { transition: transform 0.25s ease; }
 .drawer-enter-from, .drawer-leave-to { transform: translateX(100%); }

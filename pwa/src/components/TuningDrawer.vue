@@ -3,13 +3,13 @@
     <div v-if="open" class="drawer-overlay" @click.self="$emit('close')">
       <div class="drawer">
         <div class="drawer-header">
-          <span class="drawer-title">⚙ 调音台</span>
-          <button class="close-btn" @click="$emit('close')">✕</button>
+          <span class="drawer-title">TUNING</span>
+          <button class="close-btn" @click="$emit('close')"><Icon name="x" :size="14" /></button>
         </div>
 
         <div class="slider-group">
           <label class="slider-label">
-            <span>探索档位</span>
+            <span>EXPLORATION</span>
             <span class="val">{{ currentMode.en }}</span>
           </label>
           <input
@@ -25,7 +25,7 @@
 
         <div class="slider-group">
           <label class="slider-label">
-            <span>Queue 长度</span>
+            <span>QUEUE LENGTH</span>
             <span class="val">{{ local.queue_length }}</span>
           </label>
           <input
@@ -43,6 +43,7 @@
 
 <script setup>
 import { reactive, watch, computed, nextTick } from 'vue';
+import Icon from './Icon.vue';
 
 const props = defineProps({ open: Boolean, tuning: Object });
 const emit = defineEmits(['close', 'change']);
@@ -95,8 +96,8 @@ const currentMode = computed(() => nearestMode(local.exploration_pct));
   justify-content: flex-end;
 }
 .drawer {
-  background: var(--panel);
-  border-left: 1px solid var(--border);
+  background: var(--ink-1);
+  border-left: 1px solid var(--ink-2);
   width: 320px;
   max-width: 90vw;
   height: 100%;
@@ -111,61 +112,35 @@ const currentMode = computed(() => nearestMode(local.exploration_pct));
   align-items: center;
   justify-content: space-between;
 }
-.drawer-title {
-  font-size: 12px;
-  color: var(--accent);
-  letter-spacing: 2px;
-}
+.drawer-title { font-family: var(--font-sans); font-size: 10px; letter-spacing: 2px; color: var(--paper-3); }
 .close-btn {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: none; border: none; color: var(--paper-3);
+  width: 28px; height: 28px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: color 0.18s;
 }
-.close-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+.close-btn:hover { color: var(--paper-0); }
 .slider-group { display: flex; flex-direction: column; gap: 6px; }
-.slider-label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: var(--text);
-}
-.val { color: var(--accent); font-weight: 500; }
+.slider-label { display: flex; justify-content: space-between; font-family: var(--font-sans); font-size: 10px; letter-spacing: 2px; color: var(--paper-3); }
+.val { color: var(--gold); font-weight: 500; letter-spacing: 0.5px; }
 .hint { font-size: 10px; color: var(--text-dim); }
-.ticks { display: flex; justify-content: space-between; font-size: 8px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0; }
-.ticks .on { color: var(--accent); }
+.ticks { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 9px; color: var(--paper-4); margin-top: 2px; }
+.ticks .on { color: var(--gold); }
 .slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 4px;
-  background: #0a1024;
-  border: 1px solid var(--border);
-  outline: none;
-  cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 3px;
+  background: var(--ink-2);
+  border: none; border-radius: 2px;
+  outline: none; cursor: pointer;
 }
 .slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  background: var(--accent);
+  width: 14px; height: 14px;
+  background: var(--paper-0);
+  border: none; border-radius: 50%;
   cursor: pointer;
-  border: 1px solid var(--bg);
 }
-.slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  background: var(--accent);
-  cursor: pointer;
-  border: 1px solid var(--bg);
-  border-radius: 0;
-}
+.slider::-moz-range-thumb { width: 14px; height: 14px; background: var(--paper-0); border: none; border-radius: 50%; cursor: pointer; }
 .drawer-enter-active, .drawer-leave-active { transition: transform 0.25s ease; }
 .drawer-enter-from, .drawer-leave-to { transform: translateX(100%); }
 </style>
