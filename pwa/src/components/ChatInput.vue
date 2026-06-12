@@ -3,17 +3,14 @@
     <input
       ref="inputEl"
       v-model="text"
-      :placeholder="busy ? 'DJ 正在回应…' : placeholder"
+      :placeholder="busy ? 'DJ is on it…' : placeholder"
       :disabled="busy"
       autocomplete="off"
       @focus="focused = true"
       @blur="focused = false"
     />
     <button type="submit" class="send-btn" :disabled="!text.trim() || busy" aria-label="发送">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 19V5" />
-        <path d="M6 11l6-6 6 6" />
-      </svg>
+      <Icon name="arrow-up" :size="15" />
     </button>
   </form>
 </template>
@@ -21,6 +18,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { pickGreeting } from '../utils/greetings.js';
+import Icon from './Icon.vue';
 
 const text = ref('');
 const focused = ref(false);
@@ -55,52 +53,40 @@ function onSubmit() {
 .chat-pill {
   display: flex;
   align-items: center;
-  height: 48px;
-  border-radius: 24px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  padding: 4px 4px 4px 16px;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  height: 52px;
+  border: none;
+  border-top: 1px solid var(--ink-2);
+  border-radius: 0;
+  background: transparent;
+  padding: 8px 4px;
   flex-shrink: 0;
-}
-.chat-pill.focused {
-  border-color: var(--blue);
-  box-shadow: 0 0 12px var(--blue-glow);
 }
 input {
   flex: 1;
   border: none;
   background: transparent;
-  color: var(--text);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
+  color: var(--paper-1);
+  font-family: var(--font-serif);
+  font-size: 14px;
   outline: none;
   padding: 0;
   min-width: 0;
 }
-input::placeholder { color: var(--text-dim); }
-
+input::placeholder { color: var(--paper-4); }
 .send-btn {
   flex-shrink: 0;
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  border: none;
-  background: var(--accent);
-  color: var(--bg);
-  font-size: 16px;
+  border: 1px solid var(--gold);
+  background: transparent;
+  color: var(--gold);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.15s;
-  font-family: 'JetBrains Mono', monospace;
+  transition: background 0.18s, color 0.18s, opacity 0.18s;
 }
-.send-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-.send-btn:hover:not(:disabled) {
-  opacity: 0.85;
-}
+.send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.send-btn:hover:not(:disabled) { background: var(--gold); color: var(--ink-0); }
 </style>

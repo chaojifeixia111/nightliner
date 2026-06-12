@@ -134,7 +134,7 @@ function onChat(text) {
     body: JSON.stringify({ message: text }),
   }).catch(() => {
     thinking.value = false;
-    pushDjMessage({ ts: new Date().toISOString(), kind: 'system', text: '发送失败 — 后端没响应，检查服务是否在运行' });
+    pushDjMessage({ ts: new Date().toISOString(), kind: 'system', text: 'Send failed — is the backend running?' });
   });
 }
 
