@@ -2,7 +2,7 @@
   <div class="dj-log">
     <div class="log-body" ref="logBody" @scroll="onScroll">
       <div v-if="messages.length === 0 && !thinking" class="empty">
-        (waiting for DJ...)
+        Waiting for the DJ…
       </div>
 
       <div
@@ -18,20 +18,11 @@
         </div>
         <div class="msg-body" :class="bodyClass(msg)">
           <template v-if="msg.kind === 'song'">
-            <span class="song-prefix">▸ {{ msg.title }}: </span>{{ displayText(i, msg) }}
+            <span class="song-prefix">{{ msg.title }}</span> — {{ displayText(i, msg) }}
           </template>
-          <template v-else-if="msg.kind === 'opening'">
-            <span class="cli-prompt">&gt; </span>{{ displayText(i, msg) }}
-          </template>
-          <template v-else-if="msg.kind === 'chat_reply'">
-            <span class="chat-prompt">» </span>{{ displayText(i, msg) }}
-          </template>
-          <template v-else-if="msg.kind === 'user'">
-            <span class="user-prompt">$ </span>{{ msg.text }}
-          </template>
-          <template v-else-if="msg.kind === 'stream'">
-            <span class="chat-prompt">» </span>{{ msg.text }}<span v-if="msg.id === streamingId" class="stream-caret">▋</span>
-          </template>
+          <template v-else-if="msg.kind === 'opening' || msg.kind === 'chat_reply'">{{ displayText(i, msg) }}</template>
+          <template v-else-if="msg.kind === 'user'">{{ msg.text }}</template>
+          <template v-else-if="msg.kind === 'stream'">{{ msg.text }}<span v-if="msg.id === streamingId" class="stream-caret">▍</span></template>
           <template v-else-if="msg.kind === 'reaction'">
             <span class="reaction-text">reacted: {{ msg.text }}</span>
           </template>
@@ -41,7 +32,7 @@
 
       <div v-if="stats && (stats.vip_skipped > 0 || stats.not_found > 0)" class="log-msg system">
         <div class="msg-header">
-          <span class="speaker system-label">:SYSTEM</span>
+          <span class="speaker system-label">SYSTEM</span>
           <span class="ts">{{ latestTs }}</span>
         </div>
         <div class="msg-body warn-text">
@@ -173,11 +164,9 @@ function fmtTs(ts) {
 }
 
 function speakerLabel(msg) {
-  if (msg.kind === 'user') return ':USER';
-  if (msg.kind === 'reaction') return ':USER';
-  if (msg.kind === 'system') return ':SYSTEM';
-  if (msg.kind === 'chat_reply') return ':NIGHTLINERFM';
-  return ':NIGHTLINERFM';
+  if (msg.kind === 'user' || msg.kind === 'reaction') return 'YOU';
+  if (msg.kind === 'system') return 'SYSTEM';
+  return 'DJ';
 }
 
 function speakerClass(msg) {
@@ -224,21 +213,16 @@ function bodyClass(msg) {
   flex-direction: column;
   gap: 10px;
   scrollbar-width: thin;
-  scrollbar-color: var(--blue) transparent;
+  scrollbar-color: var(--ink-2) transparent;
 }
 .log-body::-webkit-scrollbar { width: 8px; }
 .log-body::-webkit-scrollbar-track { background: transparent; }
 .log-body::-webkit-scrollbar-thumb {
-  background: var(--blue-dim);
+  background: var(--ink-2);
   border-radius: 4px;
 }
-.log-body::-webkit-scrollbar-thumb:hover { background: var(--blue); }
+.log-body::-webkit-scrollbar-thumb:hover { background: var(--paper-4); }
 
-.empty {
-  font-size: 12px;
-  color: var(--text-dim);
-  padding: 4px 0;
-}
 .log-msg { display: flex; flex-direction: column; gap: 3px; }
 .msg-header {
   display: flex;
@@ -246,45 +230,35 @@ function bodyClass(msg) {
   gap: 8px;
 }
 .speaker {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 8px;
-  letter-spacing: 1px;
-}
-.speaker-claude { color: var(--text-dim); }
-.speaker-user { color: var(--blue); }
-.speaker-chat { color: #5b9bd5; }
-.system-label { color: var(--warn); }
-.ts {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 10px;
-  color: var(--text-dim);
-  opacity: 0.6;
+  letter-spacing: 2px;
+  color: var(--paper-3);
 }
+.speaker-user { color: var(--paper-3); }
+.speaker-chat, .speaker-claude { color: var(--paper-3); }
+.system-label { color: var(--negative); }
+.ts { font-family: var(--font-mono); font-size: 10px; color: var(--paper-4); opacity: 1; }
 .msg-body {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 14px;
-  color: var(--text);
-  line-height: 1.5;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  color: var(--paper-1);
+  line-height: 1.9;
   white-space: pre-line;
 }
-.song-body { color: var(--text-dim); }
-.reaction-body {
-  font-size: 12px;
-  color: var(--blue);
-  opacity: 0.85;
+.user-body, .reaction-body {
+  font-style: italic;
+  font-size: 14px;
+  color: var(--paper-3);
+  border-left: 2px solid var(--rule);
+  padding-left: 10px;
 }
-.chat-reply-body { color: #7fb8e0; }
-.stream-body { color: var(--text); }
-.stream-caret {
-  color: var(--accent);
-  margin-left: 1px;
-  animation: caretBlink 1s steps(1) infinite;
-}
+.reaction-body { font-size: 12px; }
+.song-body { color: var(--paper-1); }
+.song-prefix { color: var(--paper-0); font-weight: 500; }
+.chat-reply-body, .stream-body { color: var(--paper-1); }
+.stream-caret { color: var(--gold); margin-left: 1px; animation: caretBlink 1s steps(1) infinite; }
 @keyframes caretBlink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
-.cli-prompt { color: var(--text-dim); }
-.chat-prompt { color: #5b9bd5; }
-.user-prompt { color: var(--blue); }
-.user-body { color: var(--text); }
-.song-prefix { color: var(--accent); }
-.warn-text { color: var(--warn); }
+.warn-text { color: var(--negative); font-family: var(--font-mono); font-size: 12px; }
+.empty { font-size: 13px; color: var(--paper-4); padding: 4px 0; font-family: var(--font-sans); }
 </style>
