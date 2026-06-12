@@ -1,27 +1,10 @@
 <template>
   <div class="hero-card">
-    <!-- Time row -->
-    <div class="time-row">
-      <div class="time-left">
-        <span class="clock-time">{{ timeStr }}</span>
-        <span class="clock-date">{{ dateStr }}</span>
-      </div>
-      <div class="on-air">
-        <span class="air-dot">●</span>
-        <span class="air-label">ON AIR</span>
-      </div>
-    </div>
-
     <!-- Album cover -->
     <div class="cover-wrap">
-      <div class="cover-frame" :class="{ 'has-cover': state.now?.pic_url }">
-        <img
-          v-if="state.now?.pic_url"
-          :src="state.now.pic_url"
-          :alt="state.now.title"
-          class="cover-img"
-        />
-        <span v-else class="cover-empty">○ no signal</span>
+      <div class="cover-frame">
+        <img v-if="state.now?.pic_url" :src="state.now.pic_url" :alt="state.now.title" class="cover-img" />
+        <Icon v-else name="disc" :size="44" class="cover-empty-icon" />
       </div>
     </div>
 
@@ -29,9 +12,9 @@
     <template v-if="state.now">
       <div class="song-title">{{ state.now.title }}</div>
       <div class="song-artist">{{ state.now.ncm_artist || state.now.artist }}</div>
-      <div v-if="state.now.memoryLink" class="memory-link">[ {{ state.now.memoryLink }} ]</div>
+      <div v-if="state.now.memoryLink" class="liner-note">{{ state.now.memoryLink }}</div>
     </template>
-    <div v-else class="empty-info">( no signal · chat to start )</div>
+    <div v-else class="empty-info">Nothing playing — ask for something</div>
 
     <!-- Progress bar -->
     <div v-if="state.now" class="progress-wrap">
@@ -147,31 +130,22 @@
 
 <script setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue';
+import Icon from './Icon.vue';
 
 const props = defineProps({ state: Object });
-const emit = defineEmits(['feedback', 'skip', 'previous', 'user-message']);
+const emit = defineEmits(['feedback', 'skip', 'previous', 'user-message', 'playing-change']);
 
-// Clock state
-const timeStr = ref('');
-const dateStr = ref('');
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-
-function updateClock() {
-  const now = new Date();
-  const h = String(now.getHours()).padStart(2, '0');
-  const m = String(now.getMinutes()).padStart(2, '0');
-  timeStr.value = `${h}:${m}`;
-  dateStr.value = `${DAYS[now.getDay()]} · ${String(now.getDate()).padStart(2, '0')} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
-}
-
-let clockTimer;
-onMounted(() => { updateClock(); clockTimer = setInterval(updateClock, 1000); applyVolume(); });
-onUnmounted(() => { clearInterval(clockTimer); clearTimeout(bufferTimer); });
+onMounted(() => { applyVolume(); });
+onUnmounted(() => { clearTimeout(bufferTimer); });
 
 // Audio state
 const audio = ref(null);
 const paused = ref(false);
+
+watch([() => props.state.now, paused], ([now, p]) => {
+  emit('playing-change', !!now && !p);
+}, { immediate: true });
+
 const muted = ref(false);
 // 音量:记住用户手动调过的值(localStorage),首次默认 33(别一打开就吵)
 const VOLUME_KEY = 'nl_volume';
@@ -361,132 +335,70 @@ function cancelDislike() {
 
 <style scoped>
 .hero-card {
-  background:
-    radial-gradient(ellipse 60% 30% at 50% 0%, var(--blue-glow), transparent 70%),
-    var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 20px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--ink-2);
+  border-radius: 0;
+  padding: 22px 4px 0;
   display: flex;
   flex-direction: column;
   gap: 0;
-}
-
-/* Time row */
-.time-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-soft);
-  margin-bottom: 16px;
-}
-.time-left {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-.clock-time {
-  font-family: 'VT323', monospace;
-  font-size: 28px;
-  color: var(--accent);
-  line-height: 1;
-}
-.clock-date {
-  font-size: 11px;
-  color: var(--text-dim);
-  letter-spacing: 0.5px;
-}
-.on-air {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  letter-spacing: 1px;
-}
-.air-dot {
-  color: var(--blue);
-  animation: pulse 1.4s ease-in-out infinite;
-  text-shadow: 0 0 6px var(--blue);
-}
-.air-label {
-  font-family: 'JetBrains Mono', monospace;
-  color: var(--accent);
-}
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.2; }
+  text-align: center;
 }
 
 /* Album cover */
-.cover-wrap {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 16px;
+.cover-wrap { display: flex; justify-content: center; margin-bottom: 16px; position: relative; }
+.cover-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -48px;
+  background: radial-gradient(circle, var(--ambient-glow), transparent 70%);
+  pointer-events: none;
 }
 .cover-frame {
-  width: 240px;
-  height: 240px;
-  border: 1px solid var(--border);
+  width: 260px;
+  height: 260px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--ink-1);
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
-  overflow: hidden;
   flex-shrink: 0;
+  position: relative;
 }
-.cover-frame:not(.has-cover) {
-  border-style: dashed;
-}
-.cover-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.cover-empty {
-  font-size: 13px;
-  color: var(--text-dim);
-  letter-spacing: 1px;
-}
-
-/* Song info */
+.cover-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cover-empty-icon { color: var(--paper-4); }
 .song-title {
-  font-family: 'VT323', monospace;
-  font-size: 32px;
-  color: var(--accent);
-  line-height: 1.1;
+  font-family: var(--font-serif);
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--paper-0);
+  line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   margin-bottom: 4px;
 }
 .song-artist {
-  font-size: 13px;
-  color: var(--text-dim);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--paper-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 6px;
+  margin-bottom: 7px;
 }
-.memory-link {
-  display: inline-block;
-  font-size: 11px;
-  font-variant: small-caps;
-  color: var(--accent);
-  border: 1px solid var(--blue);
-  background: var(--blue-glow);
-  padding: 2px 8px;
-  margin-bottom: 12px;
-  letter-spacing: 0.5px;
-  box-shadow: 0 0 12px rgba(74, 127, 219, 0.15);
+.liner-note {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--paper-3);
+  margin-bottom: 4px;
 }
-.empty-info {
-  text-align: center;
-  color: var(--text-dim);
-  padding: 16px 0 12px;
-  font-size: 13px;
-}
+.empty-info { color: var(--paper-4); padding: 16px 0 12px; font-size: 13px; font-family: var(--font-sans); }
 
 /* Progress */
 .progress-wrap {
