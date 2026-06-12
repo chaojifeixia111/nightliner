@@ -28,86 +28,52 @@
       </div>
     </div>
 
-    <!-- Controls row -->
+    <!-- Controls row: volume | transport (居中) | feedback -->
     <div class="controls-row">
-      <!-- Transport buttons -->
-      <button class="ctrl-btn" title="上一首" @click="onPrevious">⏮</button>
-      <button class="ctrl-btn play-btn" @click="togglePlay">{{ paused ? '▶' : '⏸' }}</button>
-      <button class="ctrl-btn" title="跳过" @click="onSkip">⏭</button>
-
-      <div class="ctrl-spacer"></div>
-
-      <!-- Feedback: ❤ always visible, hover to reveal × -->
-      <div
-        class="feedback-zone"
-        @mouseenter="feedbackHovered = true"
-        @mouseleave="feedbackHovered = false"
-      >
-        <transition name="dislike-reveal">
-          <button
-            v-if="feedbackHovered || dislikePanelOpen"
-            class="fb-btn fb-dislike"
-            :class="{ flashed: dislikePanelOpen, 'sticky-flash': stickyFlash }"
-            title="不喜欢…"
-            @click="dislikePanelOpen = !dislikePanelOpen"
-          >×</button>
-        </transition>
-        <button
-          class="fb-btn fb-love"
-          :class="{ flashed: flashedSignal === 'love' }"
-          title="喜欢"
-          @click="quickLove"
-        >♥</button>
+      <div class="volume-wrap">
+        <button class="ghost-btn" @click="toggleMute" :title="muted ? 'Unmute' : 'Mute'">
+          <Icon :name="muted ? 'volume-x' : 'volume-2'" :size="16" />
+        </button>
+        <input type="range" min="0" max="100" step="1" v-model.number="volume"
+          class="vol-slider" :style="volTrackStyle" @input="onVolumeChange" />
       </div>
 
-      <!-- Volume -->
-      <div class="volume-wrap">
-        <button class="ctrl-btn vol-btn" @click="toggleMute" title="静音">{{ muted ? '🔇' : '🔊' }}</button>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          step="1"
-          v-model.number="volume"
-          class="vol-slider"
-          @input="onVolumeChange"
-        />
+      <div class="transport">
+        <button class="ghost-btn" title="Previous" @click="onPrevious"><Icon name="skip-back" :size="16" /></button>
+        <button class="ghost-btn play-btn" :title="paused ? 'Play' : 'Pause'" @click="togglePlay">
+          <Icon :name="paused ? 'play' : 'pause'" :size="22" />
+        </button>
+        <button class="ghost-btn" title="Skip" @click="onSkip"><Icon name="skip-forward" :size="16" /></button>
+      </div>
+
+      <div class="feedback-zone" @mouseenter="feedbackHovered = true" @mouseleave="feedbackHovered = false">
+        <transition name="dislike-reveal">
+          <button v-if="feedbackHovered || dislikePanelOpen"
+            class="ghost-btn fb-dislike" :class="{ flashed: dislikePanelOpen, 'sticky-flash': stickyFlash }"
+            title="Not feeling it" @click="dislikePanelOpen = !dislikePanelOpen">
+            <Icon name="heart-crack" :size="16" />
+          </button>
+        </transition>
+        <button class="ghost-btn fb-love" :class="{ flashed: flashedSignal === 'love' }" title="Love" @click="quickLove">
+          <Icon name="heart" :size="16" />
+        </button>
       </div>
     </div>
 
     <transition name="dislike-panel">
       <div v-if="dislikePanelOpen" class="dislike-panel">
-        <div class="panel-header">为什么不喜欢? <span class="panel-hint">(选一个 · 文字可选)</span></div>
+        <div class="panel-header">Not feeling it — why? <span class="panel-hint">(pick one · note optional)</span></div>
         <div class="radio-row">
-          <label
-            v-for="opt in DISLIKE_OPTIONS"
-            :key="opt.signal"
-            class="radio-pill"
-            :class="{ active: selectedSignal === opt.signal }"
-          >
-            <input
-              type="radio"
-              name="dislike-signal"
-              :value="opt.signal"
-              v-model="selectedSignal"
-            />
-            <span class="radio-label">{{ opt.emoji }} {{ opt.label }}</span>
+          <label v-for="opt in DISLIKE_OPTIONS" :key="opt.signal"
+            class="radio-pill" :class="{ active: selectedSignal === opt.signal }">
+            <input type="radio" name="dislike-signal" :value="opt.signal" v-model="selectedSignal" />
+            <Icon :name="opt.icon" :size="14" /><span class="radio-label">{{ opt.label }}</span>
           </label>
         </div>
-        <textarea
-          v-model="dislikeReason"
-          class="reason-input"
-          placeholder="例:听腻了 / 旋律太密 / 不在状态"
-          rows="2"
-          maxlength="200"
-        ></textarea>
+        <textarea v-model="dislikeReason" class="reason-input" placeholder="optional note" rows="2" maxlength="200"></textarea>
         <div class="panel-actions">
-          <button class="panel-btn cancel" @click="cancelDislike">取消</button>
-          <button
-            class="panel-btn submit"
-            :disabled="!selectedSignal"
-            @click="submitDislike"
-          >提交</button>
+          <button class="panel-btn cancel" @click="cancelDislike">Cancel</button>
+          <button class="panel-btn submit" :disabled="!selectedSignal" @click="submitDislike">Send</button>
         </div>
       </div>
     </transition>
@@ -173,7 +139,7 @@ const buffering = ref(false);   // seek 后等待 CDN 重新缓冲时的观感�
 let bufferTimer = null;
 
 // Feedback state
-const feedbackHovered = ref(false); // ❤ 上 hover 才显示 ×
+const feedbackHovered = ref(false); // hover to reveal dislike button
 const dislikePanelOpen = ref(false);
 const selectedSignal = ref(null);   // 'wrong_vibe' | 'too_familiar' | 'never_again'
 const dislikeReason = ref('');
@@ -181,10 +147,14 @@ const stickyFlash = ref(false);     // confirmation pulse after dislike submit
 const flashedSignal = ref(null);
 
 const DISLIKE_OPTIONS = [
-  { signal: 'wrong_vibe',   emoji: '×',  label: '不对味' },
-  { signal: 'too_familiar', emoji: '🔁', label: '太熟了' },
-  { signal: 'never_again',  emoji: '🚫', label: '别再播' },
+  { signal: 'wrong_vibe',   icon: 'frown',  label: 'Wrong vibe' },
+  { signal: 'too_familiar', icon: 'repeat', label: 'Too familiar' },
+  { signal: 'never_again',  icon: 'ban',    label: 'Never again' },
 ];
+
+const volTrackStyle = computed(() => ({
+  background: `linear-gradient(to right, var(--gold) ${volume.value}%, var(--ink-2) ${volume.value}%)`,
+}));
 
 function fmtTime(sec) {
   const s = Math.floor(sec || 0);
@@ -474,183 +444,121 @@ function cancelDislike() {
 
 /* Controls row */
 .controls-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+  padding: 6px 0 16px;
 }
-.ctrl-spacer { flex: 1; }
-.ctrl-btn {
+.ghost-btn {
   background: none;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  font-size: 14px;
-  width: 36px;
-  height: 36px;
+  border: none;
+  padding: 6px;
   cursor: pointer;
-  display: flex;
+  color: var(--paper-2);
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition: color 0.18s, transform 0.18s;
+}
+.ghost-btn:hover { color: var(--paper-0); }
+.ghost-btn:active { transform: scale(0.92); }
+.transport { display: flex; align-items: center; gap: 18px; }
+.play-btn { color: var(--paper-0); }
+.volume-wrap { display: flex; align-items: center; justify-self: start; }
+.vol-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0;
+  opacity: 0;
+  height: 3px;
   border-radius: 2px;
-}
-.ctrl-btn:hover {
-  color: var(--accent);
-  border-color: var(--blue);
-  background: var(--blue-glow);
-}
-.play-btn {
-  font-size: 16px;
-  width: 44px;
-  height: 44px;
-  border-color: var(--accent-dim);
-  color: var(--accent);
-}
-
-/* Feedback zone */
-.feedback-zone {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  position: relative;
-}
-.fb-btn {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  font-size: 14px;
-  width: 32px;
-  height: 32px;
+  border: none;
+  outline: none;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
-  border-radius: 2px;
+  transition: width 0.18s ease, opacity 0.18s ease;
 }
-.fb-love {
-  color: var(--accent);
-  border-color: var(--blue);
+.volume-wrap:hover .vol-slider, .vol-slider:focus-visible { width: 64px; opacity: 1; margin-left: 4px; }
+.vol-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 9px; height: 9px;
+  background: var(--paper-0);
+  border: none; border-radius: 50%;
+  cursor: pointer;
 }
-.fb-love.flashed {
-  background: rgba(220, 80, 110, 0.25);
-  border-color: #d8506e;
-  color: #ffb3c1;
-  box-shadow: 0 0 14px rgba(216, 80, 110, 0.5);
+.vol-slider::-moz-range-thumb {
+  width: 9px; height: 9px;
+  background: var(--paper-0);
+  border: none; border-radius: 50%;
+  cursor: pointer;
 }
-.fb-dislike {
-  color: var(--text-dim);
-  border-color: var(--border);
-}
-.fb-dislike:hover {
-  color: var(--accent);
-  border-color: var(--blue);
-}
-.fb-dislike.flashed {
-  background: var(--blue-glow);
-  border-color: var(--blue);
-  color: var(--accent);
-}
-.fb-dislike.sticky-flash {
-  background: var(--blue-glow);
-  border-color: var(--blue);
-  color: var(--accent);
-  box-shadow: 0 0 12px var(--blue-glow);
-}
-
-/* Dislike panel */
+.feedback-zone { display: flex; align-items: center; gap: 10px; justify-self: end; }
+.fb-love { color: var(--gold); }
+.fb-love.flashed { color: var(--gold); transform: scale(1.18); }
+.fb-dislike { color: var(--paper-2); }
+.fb-dislike:hover, .fb-dislike.flashed, .fb-dislike.sticky-flash { color: var(--negative); }
 .dislike-panel {
-  margin-top: 12px;
+  margin: 0 0 14px;
   padding: 14px 16px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: var(--ink-1);
+  border: 1px solid var(--ink-2);
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  text-align: left;
 }
-.panel-header {
-  font-size: 12px;
-  color: var(--accent);
-  letter-spacing: 0.5px;
-}
-.panel-hint {
-  color: var(--text-dim);
-  font-size: 10px;
-  margin-left: 4px;
-}
-.radio-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
+.panel-header { font-family: var(--font-sans); font-size: 12px; color: var(--paper-1); letter-spacing: 0.5px; }
+.panel-hint { color: var(--paper-4); font-size: 10px; margin-left: 4px; }
+.radio-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .radio-pill {
   flex: 1;
   min-width: 90px;
   cursor: pointer;
   padding: 8px 10px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  border: 1px solid var(--ink-2);
+  border-radius: 6px;
+  font-family: var(--font-sans);
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--paper-3);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  gap: 6px;
+  transition: border-color 0.18s, color 0.18s;
 }
-.radio-pill:hover { border-color: var(--blue-dim); color: var(--text); }
-.radio-pill.active {
-  border-color: var(--blue);
-  color: var(--accent);
-  background: var(--blue-glow);
-}
-.radio-pill input[type="radio"] {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
+.radio-pill:hover { border-color: var(--rule); color: var(--paper-1); }
+.radio-pill.active { border-color: var(--negative); color: var(--paper-0); }
+.radio-pill input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
 .reason-input {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: var(--ink-0);
+  border: 1px solid var(--ink-2);
+  color: var(--paper-1);
   padding: 8px 10px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 12px;
   resize: none;
   outline: none;
-  border-radius: 4px;
+  border-radius: 6px;
   width: 100%;
-  box-sizing: border-box;
 }
-.reason-input:focus { border-color: var(--blue); }
-.reason-input::placeholder { color: var(--text-dim); opacity: 0.7; }
-.panel-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
+.reason-input:focus { border-color: var(--rule); }
+.reason-input::placeholder { color: var(--paper-4); }
+.panel-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .panel-btn {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-sans);
   font-size: 11px;
+  letter-spacing: 1px;
   padding: 6px 14px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
-  border: 1px solid var(--border);
+  border: 1px solid var(--ink-2);
   background: transparent;
-  color: var(--text-dim);
-  transition: all 0.15s;
+  color: var(--paper-3);
+  transition: all 0.18s;
 }
-.panel-btn.cancel:hover { color: var(--text); border-color: var(--text-dim); }
-.panel-btn.submit {
-  background: var(--accent);
-  color: var(--bg);
-  border-color: var(--accent);
-}
-.panel-btn.submit:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
+.panel-btn.cancel:hover { color: var(--paper-1); border-color: var(--paper-4); }
+.panel-btn.submit { background: var(--gold); color: var(--ink-0); border-color: var(--gold); }
+.panel-btn.submit:disabled { opacity: 0.3; cursor: not-allowed; }
 .panel-btn.submit:hover:not(:disabled) { opacity: 0.85; }
 
 .dislike-panel-enter-active,
@@ -663,7 +571,7 @@ function cancelDislike() {
   transform: translateY(-8px);
 }
 
-/* × 按钮 hover 展开动效 */
+/* dislike-reveal hover slide-in animation */
 .dislike-reveal-enter-active,
 .dislike-reveal-leave-active {
   transition: opacity 0.18s, transform 0.18s;
@@ -672,50 +580,5 @@ function cancelDislike() {
 .dislike-reveal-leave-to {
   opacity: 0;
   transform: translateX(8px);
-}
-
-/* × 用直线字体(避免衬线弯角) */
-.fb-dislike {
-  font-family: Arial, sans-serif;  /* Arial 的 × 是干净的直线 */
-  font-size: 18px;
-  font-weight: 300;
-  line-height: 1;
-}
-
-/* Volume */
-.volume-wrap {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.vol-btn {
-  font-size: 13px;
-}
-.vol-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 80px;
-  height: 4px;
-  background: #0a1024;
-  border: 1px solid var(--border);
-  outline: none;
-  cursor: pointer;
-}
-.vol-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  background: var(--accent);
-  cursor: pointer;
-  border: 1px solid var(--bg);
-  border-radius: 50%;
-}
-.vol-slider::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  background: var(--accent);
-  cursor: pointer;
-  border: 1px solid var(--bg);
-  border-radius: 50%;
 }
 </style>
