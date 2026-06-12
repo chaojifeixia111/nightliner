@@ -1,6 +1,6 @@
 # 每日推荐 + 搜索 前端入口 Implementation Plan
 
-> **状态(2026-06-12)**:已规划、**未实现**,所有 task 均未开始。2026-06-12 改版:前端从双抽屉改为「夜刊整版页」(Task 5–7 已按新方向重写);后端 Task 1–4 不变。
+> **状态(2026-06-12)**:✅ **已实现并验证**(8 个 task 全部完成,逐 task 提交)。实现期偏差:getRecommendPool 保留了 daily+fm 混池(只增强 pic_url+src 标签,/api/recommend 取 daily 切片);artistTopSongs 已存在无需新增;resolveById 瞬时错误标 reason:error 区别于 unplayable;额外 polish:点击 pending toast、窄屏 masthead 收缩、/daily /search 斜杠命令。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -36,7 +36,7 @@
 - Create: `server/search-normalize.js`
 - Test: `tests/search-normalize.test.js`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `tests/search-normalize.test.js`:
 ```js
@@ -104,12 +104,12 @@ test('全部入口对空输入安全', () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `node --test tests/search-normalize.test.js`
 Expected: FAIL —「Cannot find module '../server/search-normalize.js'」
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `server/search-normalize.js`:
 ```js
@@ -149,12 +149,12 @@ export function normalizeSearchArtists(resp) {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `node --test tests/search-normalize.test.js`
 Expected: PASS(7 tests)
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add server/search-normalize.js tests/search-normalize.test.js
@@ -169,7 +169,7 @@ git commit -m "feat(server): add NCM result normalization helpers"
 - Create: `server/queue-ops.js`
 - Test: `tests/queue-ops.test.js`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `tests/queue-ops.test.js`:
 ```js
@@ -225,12 +225,12 @@ test('enqueue: now 为空时 → now=song(开始播)', () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `node --test tests/queue-ops.test.js`
 Expected: FAIL —「Cannot find module '../server/queue-ops.js'」
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `server/queue-ops.js`:
 ```js
@@ -257,12 +257,12 @@ export function enqueue(queue, now, song) {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `node --test tests/queue-ops.test.js`
 Expected: PASS(8 tests)
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add server/queue-ops.js tests/queue-ops.test.js
@@ -277,7 +277,7 @@ git commit -m "feat(server): add pure queue play-now/enqueue ops"
 - Modify: `server/ncm-client.js`(文件末尾,`personalFm` 之后)
 - Modify: `server/playback-coordinator.js`(`resolvePlayList` 之前加 `resolveById`)
 
-- [ ] **Step 1: ncm-client 加歌手两接口**
+- [x] **Step 1: ncm-client 加歌手两接口**
 
 在 `server/ncm-client.js` 末尾追加:
 ```js
@@ -292,7 +292,7 @@ export async function artistTopSongs(id) {
 }
 ```
 
-- [ ] **Step 2: playback-coordinator 加 `resolveById`**
+- [x] **Step 2: playback-coordinator 加 `resolveById`**
 
 `server/playback-coordinator.js` 顶部 import 已有 `songUrl, songDetail`。在 `resolvePlayList` 上方加:
 ```js
@@ -327,12 +327,12 @@ export async function resolveById({ ncm_id, title, artist }) {
 }
 ```
 
-- [ ] **Step 3: 语法检查**
+- [x] **Step 3: 语法检查**
 
 Run: `node --check server/ncm-client.js && node --check server/playback-coordinator.js && echo OK`
 Expected: `OK`(功能在 Task 4 集成验证)
 
-- [ ] **Step 4: commit**
+- [x] **Step 4: commit**
 
 ```bash
 git add server/ncm-client.js server/playback-coordinator.js
@@ -346,7 +346,7 @@ git commit -m "feat(server): add artist search/top-songs client + resolveById"
 **Files:**
 - Modify: `server/index.js`
 
-- [ ] **Step 1: 补 import**
+- [x] **Step 1: 补 import**
 
 把 Task 1/2/3 的新模块引入 `server/index.js`(在现有 import 区):
 ```js
@@ -357,7 +357,7 @@ import { playNow, enqueue } from './queue-ops.js';
 ```
 (注意:`recommendSongs, personalFm` 与 `resolvePlayList` 已有 import,合并去重,别重复声明。)
 
-- [ ] **Step 2: `getRecommendPool` 用归一化 + 保留 id/封面**
+- [x] **Step 2: `getRecommendPool` 用归一化 + 保留 id/封面**
 
 把 `getRecommendPool` 里 `dailySongs.map(...)` 与 personalFm fallback 替换为归一化调用:
 ```js
@@ -376,7 +376,7 @@ import { playNow, enqueue } from './queue-ops.js';
 (personalFm 的 `data[]` 用 `ar`/`al`,`normalizeSearchSongs` 的 `toSong` 能吃。)
 **验证 DJ prompt 无回归**:`context-builder.js` 渲染推荐池只取 `name`/`artist`,多出的 `ncm_id`/`pic_url` 不影响。
 
-- [ ] **Step 3: 加 4 个路由**
+- [x] **Step 3: 加 4 个路由**
 
 在现有 `app.get('/api/now', ...)` 附近加:
 ```js
@@ -450,13 +450,13 @@ app.post('/api/play', async (req, res) => {
 ```
 (`currentQueue` / `now` / `broadcast` / `recordQueue` 均为 index.js 现有的模块级变量/函数。)
 
-- [ ] **Step 4: 语法检查 + 起服务**
+- [x] **Step 4: 语法检查 + 起服务**
 
 Run: `node --check server/index.js && echo OK`
 Expected: `OK`
 然后(NCM + cookie 就绪下)起服务:`node --env-file=.env server/index.js`(后台或另开终端)。
 
-- [ ] **Step 5: 集成验证(curl 运行中的 :8080)**
+- [x] **Step 5: 集成验证(curl 运行中的 :8080)**
 
 ```bash
 curl -s "http://localhost:8080/api/recommend" | head -c 300; echo
@@ -476,7 +476,7 @@ curl -s -X POST "http://localhost:8080/api/play" -H "Content-Type: application/j
 ```
 Expected:`{"songs":[...]}`;play → `{"ok":true,"song":{...,"url":"http...","found":true}}`。VIP/无版权曲应返回 `{"ok":false,"reason":"unplayable"}`。
 
-- [ ] **Step 6: commit**
+- [x] **Step 6: commit**
 
 ```bash
 git add server/index.js
@@ -494,7 +494,7 @@ git commit -m "feat(server): add recommend/search/artist-songs/play endpoints"
 - Create: `pwa/src/components/ArtistRow.vue`
 - Create: `pwa/src/components/SongCard.vue`
 
-- [ ] **Step 1: Icon.vue 增补 4 个 lucide 路径**
+- [x] **Step 1: Icon.vue 增补 4 个 lucide 路径**
 
 在 `pwa/src/components/Icon.vue` 的 `PATHS` 对象末尾(`'x'` 之后)追加:
 ```js
@@ -504,7 +504,7 @@ git commit -m "feat(server): add recommend/search/artist-songs/play endpoints"
   'chevron-right': '<path d="m9 18 6-6-6-6"/>',
 ```
 
-- [ ] **Step 2: ws-client 加 `playSong`**
+- [x] **Step 2: ws-client 加 `playSong`**
 
 `pwa/src/ws-client.js` 末尾追加:
 ```js
@@ -518,7 +518,7 @@ export function playSong(song, mode) {
 }
 ```
 
-- [ ] **Step 3: SongRow.vue(搜索结果行)**
+- [x] **Step 3: SongRow.vue(搜索结果行)**
 
 `pwa/src/components/SongRow.vue`:
 ```vue
@@ -561,7 +561,7 @@ defineEmits(['play', 'queue']);
 </style>
 ```
 
-- [ ] **Step 4: ArtistRow.vue(歌手行)**
+- [x] **Step 4: ArtistRow.vue(歌手行)**
 
 `pwa/src/components/ArtistRow.vue`:
 ```vue
@@ -598,7 +598,7 @@ defineEmits(['open']);
 </style>
 ```
 
-- [ ] **Step 5: SongCard.vue(每日推荐封面卡)**
+- [x] **Step 5: SongCard.vue(每日推荐封面卡)**
 
 `pwa/src/components/SongCard.vue`:
 ```vue
@@ -658,12 +658,12 @@ defineEmits(['play', 'queue']);
 </style>
 ```
 
-- [ ] **Step 6: 构建检查**
+- [x] **Step 6: 构建检查**
 
 Run: `cd pwa && npm run build`
 Expected: 构建成功(组件在 Task 6 被 DiscoverPage 渲染后做可视验证)。
 
-- [ ] **Step 7: commit**
+- [x] **Step 7: commit**
 
 ```bash
 git add pwa/src/components/Icon.vue pwa/src/ws-client.js pwa/src/components/SongRow.vue pwa/src/components/ArtistRow.vue pwa/src/components/SongCard.vue
@@ -677,7 +677,7 @@ git commit -m "feat(pwa): song/artist rows + daily card + playSong helper + new 
 **Files:**
 - Create: `pwa/src/components/DiscoverPage.vue`
 
-- [ ] **Step 1: 写组件(完整)**
+- [x] **Step 1: 写组件(完整)**
 
 `pwa/src/components/DiscoverPage.vue`:
 ```vue
@@ -933,12 +933,12 @@ async function onQueue(s) {
 </style>
 ```
 
-- [ ] **Step 2: 构建检查**
+- [x] **Step 2: 构建检查**
 
 Run: `cd pwa && npm run build`
 Expected: 构建成功(还没有入口,Task 7 接线后做可视验证)。
 
-- [ ] **Step 3: commit**
+- [x] **Step 3: commit**
 
 ```bash
 git add pwa/src/components/DiscoverPage.vue
@@ -953,7 +953,7 @@ git commit -m "feat(pwa): discover page — daily picks grid + song/artist searc
 - Modify: `pwa/src/components/AppHeader.vue`
 - Modify: `pwa/src/App.vue`
 
-- [ ] **Step 1: AppHeader 加 DAILY / SEARCH 链接**
+- [x] **Step 1: AppHeader 加 DAILY / SEARCH 链接**
 
 `pwa/src/components/AppHeader.vue` 的 `mast-actions` 里、`QUEUE` 之前加(顺序:ON AIR → DAILY → SEARCH → QUEUE → TUNING):
 ```html
@@ -965,7 +965,7 @@ git commit -m "feat(pwa): discover page — daily picks grid + song/artist searc
 defineEmits(['open-tuning', 'open-queue', 'open-daily', 'open-search']);
 ```
 
-- [ ] **Step 2: App.vue 接线**
+- [x] **Step 2: App.vue 接线**
 
 `pwa/src/App.vue`:
 1. import + ref:
@@ -1008,22 +1008,22 @@ function openDiscover(focusSearch) {
 ```
 并在 `/help` 文案里补两行:`/daily          打开每日推荐`、`/search         打开搜索`。
 
-- [ ] **Step 3: 可视验证(逐项,截图留档)**
+- [x] **Step 3: 可视验证(逐项,截图留档)**
 
 前置就绪后 `cd pwa && npm run dev`,开 http://localhost:5173:
-- [ ] masthead 显示 `DAILY SEARCH QUEUE TUNING`,手机宽度(375px)不换行不挤掉 wordmark。
-- [ ] 点 DAILY → 整版页上滑淡入,栏目标签 `TODAY — {DOW} · {DD MMM} · N TRACKS`,封面卡网格(桌面 4 列左右,手机 2 列),封面图正常加载。
-- [ ] 点 SEARCH → 同一页打开且输入框自动聚焦。
-- [ ] 点某张卡 → HeroCard 立即换歌播放,页面保持打开,该卡金边 + `· playing`。
-- [ ] 点卡角 ⊕ → toast `Queued — {name}`;开 QUEUE 抽屉确认它在末尾;当前歌没被打断。
-- [ ] 输入歌名 → 300ms 后出 SongRow 结果;点行即播;⊕ 排队;无结果显示 `Nothing found for "{q}".`。
-- [ ] 切 ARTISTS → 输入歌手 → 歌手列表(圆头像);点一行 → `‹ {歌手} — TOP SONGS` + 热门曲;返回正常;切回 SONGS 或改词视图复位。
-- [ ] 清空输入 → 回到今日推荐卡片。
-- [ ] VIP/无版权曲点播 → toast `Can't play this one — VIP or region-locked.`,不崩。
-- [ ] Esc 关闭;✕ 关闭;再开不重复拉每日推荐(network 面板确认)。
-- [ ] 版式与 night-issue 一致:serif 歌名、sans 小字距标签、金色只用于 active/playing。
+- [x] masthead 显示 `DAILY SEARCH QUEUE TUNING`,手机宽度(375px)不换行不挤掉 wordmark。
+- [x] 点 DAILY → 整版页上滑淡入,栏目标签 `TODAY — {DOW} · {DD MMM} · N TRACKS`,封面卡网格(桌面 4 列左右,手机 2 列),封面图正常加载。
+- [x] 点 SEARCH → 同一页打开且输入框自动聚焦。
+- [x] 点某张卡 → HeroCard 立即换歌播放,页面保持打开,该卡金边 + `· playing`。
+- [x] 点卡角 ⊕ → toast `Queued — {name}`;开 QUEUE 抽屉确认它在末尾;当前歌没被打断。
+- [x] 输入歌名 → 300ms 后出 SongRow 结果;点行即播;⊕ 排队;无结果显示 `Nothing found for "{q}".`。
+- [x] 切 ARTISTS → 输入歌手 → 歌手列表(圆头像);点一行 → `‹ {歌手} — TOP SONGS` + 热门曲;返回正常;切回 SONGS 或改词视图复位。
+- [x] 清空输入 → 回到今日推荐卡片。
+- [x] VIP/无版权曲点播 → toast `Can't play this one — VIP or region-locked.`,不崩。
+- [x] Esc 关闭;✕ 关闭;再开不重复拉每日推荐(network 面板确认)。
+- [x] 版式与 night-issue 一致:serif 歌名、sans 小字距标签、金色只用于 active/playing。
 
-- [ ] **Step 4: commit**
+- [x] **Step 4: commit**
 
 ```bash
 git add pwa/src/components/AppHeader.vue pwa/src/App.vue
@@ -1037,12 +1037,12 @@ git commit -m "feat(pwa): masthead DAILY/SEARCH entries + discover wiring"
 **Files:**
 - Modify: `nightliner-design-v0.5.md`(补手动点播小节)
 
-- [ ] **Step 1: 后端全量单测**
+- [x] **Step 1: 后端全量单测**
 
 Run: `node --env-file=.env --test --test-concurrency=1 "tests/**/*.test.js"`
 Expected: 全绿(含新增 search-normalize、queue-ops;原有测试不受影响)。
 
-- [ ] **Step 2: DJ 推荐链路无回归**
+- [x] **Step 2: DJ 推荐链路无回归**
 
 对运行中的 server 发一轮 chat,确认每日推荐池仍进 prompt 且 DJ 正常出歌:
 ```bash
@@ -1050,23 +1050,23 @@ curl -s -X POST "http://localhost:8080/api/chat" -H "Content-Type: application/j
 ```
 Expected:`{"ok":true,...}`;服务日志出现 `[recommend] pool refreshed: N songs` 与 `[chat] intent=recommend`。
 
-- [ ] **Step 3: 前端生产构建**
+- [x] **Step 3: 前端生产构建**
 
 Run: `cd pwa && npm run build`
 Expected: 构建成功,无报错。
 
-- [ ] **Step 4: 端到端可视烟测**
+- [x] **Step 4: 端到端可视烟测**
 
 `node --env-file=.env server/index.js` + 访问构建产物(server 静态托管 `pwa/dist`):
-- [ ] DAILY:点卡即播 + ⊕ 排队。
-- [ ] SEARCH:歌曲、歌手、歌手下钻,各点播一次。
-- [ ] 整版页与 QUEUE / TUNING 抽屉互不打架;关闭/打开正常。
+- [x] DAILY:点卡即播 + ⊕ 排队。
+- [x] SEARCH:歌曲、歌手、歌手下钻,各点播一次。
+- [x] 整版页与 QUEUE / TUNING 抽屉互不打架;关闭/打开正常。
 
-- [ ] **Step 5: 同步 nightliner-design-v0.5.md(维护纪律)**
+- [x] **Step 5: 同步 nightliner-design-v0.5.md(维护纪律)**
 
 `/api/play` 是新的播放行为入口(手动点播绕过 DJ),按 CLAUDE.md 纪律在 v0.5 文档补一小节「手动点播(DAILY / SEARCH 整版页)」:4 个接口一览、mode now/queue 的队列语义(插当前歌之后 / 追加队尾)、不校验 anti/cooldown 的原因、play-event 照常由前端上报。
 
-- [ ] **Step 6: 最终 commit**
+- [x] **Step 6: 最终 commit**
 
 ```bash
 git add nightliner-design-v0.5.md

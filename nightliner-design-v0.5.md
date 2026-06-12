@@ -170,6 +170,8 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
 
 **已知取舍**:部分 VIP 独享 / 仅有翻唱的歌会掉队。这是当前已知、未优先处理的缺口。
 
+**手动点播路径(`resolveById`,DAILY / SEARCH 整版页用)**:前端带确定的 `ncm_id` → 跳过搜索,直接 `song/url/v1` 取直链 + `song/detail` 补封面/时长。无直链(VIP/无版权)→ `reason:'unplayable'`;瞬时网络 / NCM 5xx → `reason:'error'`(前端文案区分"放弃"和"重试")。没带 `ncm_id` 时降级走 `resolvePlayList`。
+
 ---
 
 ## 六、状态与存储
@@ -205,6 +207,10 @@ POST /api/play-event         播放结束事件(ended_reason=natural 时自动�
 POST /api/skip               显式跳过(记 user_skip)
 POST /api/skip-to            跳到 queue 内指定歌
 POST /api/previous           回上一首(playHistory)
+GET  /api/recommend          今日每日推荐(推荐池 daily 切片,带 ncm_id/pic_url;空了退回整池)
+GET  /api/search             ?q=&type=song|artist —— 歌曲(cloudsearch type=1)/ 歌手(type=100)
+GET  /api/artist/songs       ?id= —— 歌手热门曲(/artist/top/song)
+POST /api/play               手动点播 {title, artist, ncm_id?, mode:'now'|'queue'}
 GET  /api/state/anti         anti-list
 GET  /api/state/cooldown     active cooldowns
 GET  /api/state/history      最近 10 轮 chat_turns
@@ -213,6 +219,8 @@ WS   (同端口)                广播
 ```
 
 WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `dj_stream_delta` / `dj_stream_end` / `dj_message` / `stats`。
+
+**手动点播语义**(DAILY / SEARCH 整版页 → `POST /api/play`):`mode:'now'` 把歌插到当前 now 之后并切过去——DJ 队列原样保留,这首播完顺着原队列走;`mode:'queue'` 追加队尾、不动 now(now 为空则直接开播)。队列变更是纯函数(`queue-ops.js`),`recordQueue({mode:'manual'})` 记档。**不校验 anti/cooldown**——用户明确点名就尊重,这些约束只作用于 DJ 出歌的 prompt。play-event 仍由前端 `<audio>` 照常上报,口味学习不断档。
 
 ---
 
@@ -226,8 +234,11 @@ WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `
 | `QueueDrawer.vue` | queue 预览 |
 | `ChatInput.vue` | 底部常驻输入 |
 | `DJLog.vue` | DJ 流式气泡(逐字)+ 系统消息 |
-| `AppHeader` / `StatusBar` / `ThinkingIndicator` / `FeedbackButtons` | 头部 / 状态 / 思考中 / 旧版四键(HeroCard 内已自带反馈) |
-| `ws-client.js` | WS 封装 + `sendFeedback` 等 fetch helper |
+| `AppHeader.vue` | masthead:wordmark + ON AIR + 文字导航 DAILY / SEARCH / QUEUE / TUNING(窄屏 ON AIR 退化为呼吸金点) |
+| `DiscoverPage.vue` | **整版页**:顶部搜索栏;空态 = 每日推荐封面卡网格;输入即搜(SONGS/ARTISTS 切换,歌手下钻热门曲);点卡/行即播、⊕ 排队;Esc/✕ 关闭 |
+| `SongCard.vue` / `SongRow.vue` / `ArtistRow.vue` | 封面卡 / 结果行 / 歌手行(playing 金色高亮) |
+| `ThinkingIndicator` | 思考中 |
+| `ws-client.js` | WS 封装(断线自动重连)+ `sendFeedback` / `playSong` 等 fetch helper |
 
 ---
 
@@ -260,10 +271,12 @@ server/
   embedder.js           BGE-M3(@huggingface/transformers ONNX q8)embed/embedBatch/warmup
   vec-store.js          searchSimilar({embedding, source_type, top_k})
   state-db.js           SQLite + sqlite-vec;play/feedback/queue/chatTurn + skipStats/staleLoves + embeddings CRUD
-  ncm-client.js         网易云封装(cloudsearch/songUrl/recommend/personalFm/simiSong/artistTopSongs/…)
+  ncm-client.js         网易云封装(cloudsearch/searchArtists/songUrl/recommend/personalFm/simiSong/artistTopSongs/…)
   llm-adapter.js        callLlm / callLlmStream(SSE)/ splitSayAndJson / extractJson;多 provider 路由
   llm-logger.js         llm-calls.jsonl 落盘
-  playback-coordinator.js  resolvePlayList:cloudsearch → pickBest(原唱)→ songUrl
+  playback-coordinator.js  resolvePlayList(cloudsearch → pickBest 原唱 → songUrl)+ resolveById(手动点播按 id 直取)
+  search-normalize.js   NCM 返回 → 前端统一形状(song/artist)纯函数
+  queue-ops.js          playNow/enqueue:currentQueue/now 纯变更(手动点播用)
   budget-enforcer.js    checkReasonHallucination(仍用);enforceSourcePoolBudget(legacy,已不在 chat 流程)
 
 prompts/
