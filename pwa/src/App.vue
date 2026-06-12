@@ -1,12 +1,13 @@
 <template>
   <div class="app-shell">
-    <AppHeader @open-tuning="tuningOpen = true" @open-queue="queueOpen = true" />
+    <AppHeader :connected="connected" :playing="playing" @open-tuning="tuningOpen = true" @open-queue="queueOpen = true" />
     <HeroCard
       :state="state"
       @feedback="onFeedback"
       @skip="onSkip"
       @previous="onPrevious"
       @user-message="pushDjMessage"
+      @playing-change="playing = $event"
     />
     <div class="djlog-wrap">
       <DJLog :messages="djMessages" :thinking="thinking" :stats="lastStats" :streaming-id="streamingId" />
@@ -43,6 +44,7 @@ const connected = ref(false);
 const tuningOpen = ref(false);
 const queueOpen = ref(false);
 const thinking = ref(false);
+const playing = ref(false);
 const djMessages = ref([]);
 const lastStats = ref(null);
 const streamingId = ref(null);
