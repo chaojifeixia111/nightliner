@@ -36,7 +36,7 @@
           <span class="ts">{{ latestTs }}</span>
         </div>
         <div class="msg-body warn-text">
-          ⚠ {{ stats.vip_skipped }} 首无版权/下架，{{ stats.not_found }} 首未搜到 (共 {{ stats.total }} 首推荐)
+          {{ stats.vip_skipped }} unavailable, {{ stats.not_found }} not found (of {{ stats.total }} picked)
         </div>
       </div>
 

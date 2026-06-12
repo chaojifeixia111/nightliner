@@ -9,7 +9,7 @@
       @focus="focused = true"
       @blur="focused = false"
     />
-    <button type="submit" class="send-btn" :disabled="!text.trim() || busy" aria-label="发送">
+    <button type="submit" class="send-btn" :disabled="!text.trim() || busy" aria-label="Send">
       <Icon name="arrow-up" :size="15" />
     </button>
   </form>

@@ -18,7 +18,7 @@
               class="queue-row"
               :class="{ current: isNow(song) }"
               @click="skipTo(song)"
-              :title="`跳转: ${song.title}`"
+              :title="`Play ${song.title}`"
             >
               <span class="idx">{{ String(idx + 1).padStart(2, '0') }}</span>
               <span class="song-name">{{ song.title }}</span>
