@@ -184,7 +184,7 @@ function onCommand({ cmd, args }) {
     case 'antilist':
       fetch('/api/state/anti').then(r => r.json()).then(items => {
         const lines = items.length
-          ? items.map(s => `🚫 ${s.song_title} / ${s.song_artist}`).join('\n')
+          ? items.map(s => `${s.song_title} / ${s.song_artist}`).join('\n')
           : '(空)';
         pushDjMessage({ ts: new Date().toISOString(), kind: 'system',
           text: `Anti-list (${items.length} 条):\n${lines}` });
@@ -193,7 +193,7 @@ function onCommand({ cmd, args }) {
     case 'cooldown':
       fetch('/api/state/cooldown').then(r => r.json()).then(items => {
         const lines = items.length
-          ? items.map(s => `🔁 ${s.song_title} / ${s.song_artist} (until ${new Date(s.cooldown_until * 1000).toLocaleDateString()})`).join('\n')
+          ? items.map(s => `${s.song_title} / ${s.song_artist} (until ${new Date(s.cooldown_until * 1000).toLocaleDateString()})`).join('\n')
           : '(空)';
         pushDjMessage({ ts: new Date().toISOString(), kind: 'system',
           text: `Cooldown (${items.length} 条):\n${lines}` });
@@ -211,7 +211,7 @@ function onCommand({ cmd, args }) {
     case 'stats':
       fetch('/api/state/stats').then(r => r.json()).then(s => {
         pushDjMessage({ ts: new Date().toISOString(), kind: 'system',
-          text: `❤ love: ${s.love || 0}\n✗ wrong_vibe: ${s.wrong_vibe || 0}\n🔁 too_familiar: ${s.too_familiar || 0}\n🚫 never_again: ${s.never_again || 0}\nplay events: ${s.play_events || 0}\nchat turns: ${s.chat_turns || 0}` });
+          text: `love: ${s.love || 0}\nwrong_vibe: ${s.wrong_vibe || 0}\ntoo_familiar: ${s.too_familiar || 0}\nnever_again: ${s.never_again || 0}\nplay events: ${s.play_events || 0}\nchat turns: ${s.chat_turns || 0}` });
       }).catch(e => pushDjMessage({ ts: new Date().toISOString(), kind: 'system', text: `错误: ${e.message}` }));
       break;
     default:

@@ -123,7 +123,7 @@ const currentMode = computed(() => nearestMode(local.exploration_pct));
 .slider-group { display: flex; flex-direction: column; gap: 6px; }
 .slider-label { display: flex; justify-content: space-between; font-family: var(--font-sans); font-size: 10px; letter-spacing: 2px; color: var(--paper-3); }
 .val { color: var(--gold); font-weight: 500; letter-spacing: 0.5px; }
-.hint { font-size: 10px; color: var(--text-dim); }
+.hint { font-size: 10px; color: var(--paper-3); }
 .ticks { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 9px; color: var(--paper-4); margin-top: 2px; }
 .ticks .on { color: var(--gold); }
 .slider {

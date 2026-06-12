@@ -448,7 +448,7 @@ function cancelDislike() {
 }
 @keyframes buf-label {
   0%, 100% { opacity: 0.45; }
-  50% { opacity: 1; color: var(--accent); }
+  50% { opacity: 1; color: var(--paper-0); }
 }
 
 /* Controls row */
