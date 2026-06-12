@@ -18,12 +18,14 @@
 
     <!-- Progress bar -->
     <div v-if="state.now" class="progress-wrap">
-      <span class="time-label" :class="{ 'buf-pulse': buffering }">{{ fmtTime(currentSec) }}</span>
       <div class="progress-track" :class="{ buffering }" @mousedown="onSeekStart" @touchstart.passive="onSeekStart">
         <div class="progress-fill" :style="{ width: progressPct + '%' }"></div>
         <div class="progress-thumb" :style="{ left: progressPct + '%' }"></div>
       </div>
-      <span class="time-label">{{ fmtTime(durationSec) }}</span>
+      <div class="time-row">
+        <span class="time-label" :class="{ 'buf-pulse': buffering }">{{ fmtTime(currentSec) }}</span>
+        <button class="time-label time-toggle" @click="showRemaining = !showRemaining">{{ rightTimeLabel }}</button>
+      </div>
     </div>
 
     <!-- Controls row -->
@@ -129,7 +131,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { ref, watch, computed, onMounted, onUnmounted } from 'vue';
 import Icon from './Icon.vue';
 
 const props = defineProps({ state: Object });
@@ -159,6 +161,12 @@ const volume = ref(loadVolume());
 const currentSec = ref(0);
 const durationSec = ref(0);
 const progressPct = ref(0);
+const showRemaining = ref(false);
+const rightTimeLabel = computed(() =>
+  showRemaining.value
+    ? `−${fmtTime(Math.max(0, durationSec.value - currentSec.value))}`
+    : fmtTime(durationSec.value)
+);
 let lastReportedSec = 0;
 let seeking = false;
 const buffering = ref(false);   // seek 后等待 CDN 重新缓冲时的观感指示
@@ -401,43 +409,37 @@ function cancelDislike() {
 .empty-info { color: var(--paper-4); padding: 16px 0 12px; font-size: 13px; font-family: var(--font-sans); }
 
 /* Progress */
-.progress-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 12px 0 8px;
-}
-.time-label {
-  font-size: 11px;
-  color: var(--text-dim);
-  min-width: 36px;
-}
+.progress-wrap { margin: 14px 0 0; }
 .progress-track {
-  flex: 1;
-  height: 6px;
-  background: #0a1024;
-  border: 1px solid var(--border);
+  height: 3px;
+  background: var(--ink-2);
+  border: none;
+  border-radius: 2px;
   position: relative;
   cursor: pointer;
   user-select: none;
 }
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--blue) 0%, var(--accent) 100%);
-  box-shadow: 0 0 8px rgba(74, 127, 219, 0.5);
-  pointer-events: none;
-}
+.progress-fill { height: 100%; background: var(--gold); border-radius: 2px; pointer-events: none; }
 .progress-thumb {
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 10px;
-  height: 10px;
-  background: var(--accent);
-  border: 1px solid var(--bg);
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--paper-0);
   pointer-events: none;
-  z-index: 2;   /* 保持在缓冲微光之上 */
+  z-index: 2;
 }
+.time-row { display: flex; justify-content: space-between; margin-top: 5px; }
+.time-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--paper-4);
+  min-width: 36px;
+}
+.time-toggle { background: none; border: none; padding: 0; cursor: pointer; text-align: right; }
+.time-toggle:hover { color: var(--paper-2); }
 
 /* Buffering:seek 命中未缓冲区间、等 CDN 回数据时的观感指示 */
 .progress-track.buffering::after {
@@ -445,7 +447,7 @@ function cancelDislike() {
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: linear-gradient(90deg, transparent 0%, rgba(74, 127, 219, 0.45) 50%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(194, 163, 107, 0.45) 50%, transparent 100%);
   background-size: 45% 100%;
   background-repeat: no-repeat;
   animation: buf-sweep 1.1s ease-in-out infinite;
@@ -459,8 +461,8 @@ function cancelDislike() {
   animation: buf-thumb 1.1s ease-in-out infinite;
 }
 @keyframes buf-thumb {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 127, 219, 0); }
-  50% { box-shadow: 0 0 8px 2px rgba(74, 127, 219, 0.6); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(194, 163, 107, 0); }
+  50% { box-shadow: 0 0 8px 2px rgba(194, 163, 107, 0.6); }
 }
 .time-label.buf-pulse {
   animation: buf-label 1.1s ease-in-out infinite;
