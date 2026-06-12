@@ -96,6 +96,7 @@ function endStream({ id, say }) {
 onMounted(() => {
   ws = connectWs((msg) => {
     if (msg.type === 'connected') connected.value = true;
+    if (msg.type === 'disconnected') connected.value = false;
     if (msg.type === 'now') state.now = msg.data;
     if (msg.type === 'queue') state.queue = msg.data;
     if (msg.type === 'tuning') Object.assign(state.tuning, msg.data);
