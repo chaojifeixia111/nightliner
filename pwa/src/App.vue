@@ -13,7 +13,6 @@
       <DJLog :messages="djMessages" :thinking="thinking" :stats="lastStats" :streaming-id="streamingId" />
     </div>
     <ChatInput :busy="thinking" @send="onChat" @command="onCommand" />
-    <StatusBar :connected="connected" />
     <TuningDrawer
       :open="tuningOpen"
       :tuning="state.tuning"
@@ -35,7 +34,6 @@ import AppHeader from './components/AppHeader.vue';
 import HeroCard from './components/HeroCard.vue';
 import DJLog from './components/DJLog.vue';
 import ChatInput from './components/ChatInput.vue';
-import StatusBar from './components/StatusBar.vue';
 import TuningDrawer from './components/TuningDrawer.vue';
 import QueueDrawer from './components/QueueDrawer.vue';
 import { connectWs, sendFeedback } from './ws-client.js';
@@ -232,7 +230,7 @@ function onCommand({ cmd, args }) {
   flex-direction: column;
   gap: 8px;
   padding-top: 8px;
-  padding-bottom: 36px;       /* 给底部固定的 StatusBar(28px)留位置,留 8px 缓冲 */
+  padding-bottom: 8px;
   min-height: 0;              /* 允许 flex children 收缩,让 DJLog 内部滚 */
 }
 

@@ -1,6 +1,6 @@
 <template>
   <div v-if="show" class="thinking">
-    <span class="label">DJ 正在选歌</span>
+    <span class="label">Picking the next one…</span>
     <span class="dots">
       <span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>
     </span>
@@ -20,17 +20,12 @@ defineProps({ show: Boolean });
   font-size: 13px;
 }
 .label {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-serif);
+  font-style: italic;
   font-size: 13px;
-  color: var(--accent);
-  letter-spacing: 0.5px;
+  color: var(--paper-3);
 }
-.dot {
-  animation: blink 1.2s infinite;
-  color: var(--accent);
-  font-size: 18px;
-  line-height: 1;
-}
+.dot { animation: blink 1.2s infinite; color: var(--gold); font-size: 18px; line-height: 1; }
 .dot:nth-child(2) { animation-delay: 0.2s; }
 .dot:nth-child(3) { animation-delay: 0.4s; }
 @keyframes blink {
