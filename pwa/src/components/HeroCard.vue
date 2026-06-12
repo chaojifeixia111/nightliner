@@ -99,6 +99,7 @@
 <script setup>
 import { ref, watch, computed, onMounted, onUnmounted } from 'vue';
 import Icon from './Icon.vue';
+import { extractAmbient } from '../utils/ambient.js';
 
 const props = defineProps({ state: Object });
 const emit = defineEmits(['feedback', 'skip', 'previous', 'user-message', 'playing-change']);
@@ -112,6 +113,14 @@ const paused = ref(false);
 
 watch([() => props.state.now, paused], ([now, p]) => {
   emit('playing-change', !!now && !p);
+}, { immediate: true });
+
+watch(() => props.state.now?.pic_url, async (url) => {
+  const rgb = url ? await extractAmbient(url) : null;
+  const glow = rgb
+    ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.18)`
+    : 'rgba(194, 163, 107, 0.14)';
+  document.documentElement.style.setProperty('--ambient-glow', glow);
 }, { immediate: true });
 
 const muted = ref(false);
