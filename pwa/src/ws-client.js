@@ -60,3 +60,12 @@ export function sendFeedback(fb) {
     body: JSON.stringify(fb),
   });
 }
+
+// 手动点播/排队(DAILY / SEARCH 整版页);mode: 'now' | 'queue'。返回 { ok, song?, reason? }。
+export function playSong(song, mode) {
+  return fetch('/api/play', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: song.name, artist: song.artist, ncm_id: song.ncm_id, mode }),
+  }).then(r => r.json());
+}
