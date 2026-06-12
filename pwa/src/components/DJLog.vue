@@ -212,16 +212,8 @@ function bodyClass(msg) {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--ink-2) transparent;
+  /* 滚动条样式已全局统一(index.html) */
 }
-.log-body::-webkit-scrollbar { width: 8px; }
-.log-body::-webkit-scrollbar-track { background: transparent; }
-.log-body::-webkit-scrollbar-thumb {
-  background: var(--ink-2);
-  border-radius: 4px;
-}
-.log-body::-webkit-scrollbar-thumb:hover { background: var(--paper-4); }
 
 .log-msg { display: flex; flex-direction: column; gap: 3px; }
 .msg-header {

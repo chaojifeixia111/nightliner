@@ -50,6 +50,13 @@
     }
 
     ::selection { background: var(--rule); color: var(--paper-0); }
+
+    /* night-issue 滚动条:全局统一(DJ log / 抽屉 / DAILY / SEARCH) */
+    * { scrollbar-width: thin; scrollbar-color: var(--ink-2) transparent; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--ink-2); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--paper-4); }
   </style>
 </head>
 <body>
