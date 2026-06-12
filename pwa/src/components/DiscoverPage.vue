@@ -3,13 +3,14 @@
     <div v-if="open" class="page-overlay">
       <div class="page-col">
         <div class="top-row">
-          <div class="search-bar" :class="{ active: query.trim() }">
+          <div v-if="variant === 'search'" class="search-bar" :class="{ active: query.trim() }">
             <Icon name="search" :size="15" class="search-ic" />
             <input ref="box" v-model="query" placeholder="Search songs or artists…" />
             <button v-if="query" class="ghost" @click="query = ''" aria-label="Clear">
               <Icon name="x" :size="13" />
             </button>
           </div>
+          <div v-else class="page-title">TODAY — {{ dateLabel }}<span v-if="daily.length"> · {{ daily.length }} TRACKS</span></div>
           <button class="ghost close" @click="$emit('close')" aria-label="Close">
             <Icon name="x" :size="16" />
           </button>
@@ -18,13 +19,16 @@
         <div v-if="toast" class="toast">{{ toast }}</div>
 
         <div class="body">
-          <template v-if="!query.trim()">
-            <div class="section-label">TODAY — {{ dateLabel }}<span v-if="daily.length"> · {{ daily.length }} TRACKS</span></div>
+          <template v-if="variant === 'daily'">
             <div v-if="dailyLoading" class="hint">Loading…</div>
             <div v-else-if="!daily.length" class="hint">Couldn't fetch today's picks — check NetEase login.</div>
             <div v-else class="card-grid">
               <SongCard v-for="s in daily" :key="s.ncm_id" :song="s" :is-now="isNow(s)" @play="onPlay" @queue="onQueue" />
             </div>
+          </template>
+
+          <template v-else-if="!query.trim()">
+            <div class="hint">Type to search.</div>
           </template>
 
           <template v-else>
@@ -63,7 +67,11 @@ import SongRow from './SongRow.vue';
 import ArtistRow from './ArtistRow.vue';
 import { playSong } from '../ws-client.js';
 
-const props = defineProps({ open: Boolean, focusSearch: Boolean, now: Object });
+const props = defineProps({
+  open: Boolean,
+  variant: { type: String, default: 'daily' },   // 'daily' | 'search'
+  now: Object,
+});
 const emit = defineEmits(['close']);
 
 const query = ref('');
@@ -95,8 +103,8 @@ function onKey(e) {
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
     window.addEventListener('keydown', onKey);
-    if (!dailyLoaded || !daily.value.length) loadDaily();
-    if (props.focusSearch) nextTick(() => box.value?.focus());
+    if (props.variant === 'daily' && (!dailyLoaded || !daily.value.length)) loadDaily();
+    if (props.variant === 'search') nextTick(() => box.value?.focus());
   } else {
     window.removeEventListener('keydown', onKey);
   }
@@ -226,9 +234,9 @@ async function onQueue(s) {
   padding: 6px 10px; margin-top: 10px; flex-shrink: 0;
 }
 .body { flex: 1; overflow-y: auto; padding: 14px 0 24px; }
-.section-label {
-  font-family: var(--font-sans); font-size: 10px; letter-spacing: 2px;
-  color: var(--paper-3); margin-bottom: 12px;
+.page-title {
+  flex: 1; font-family: var(--font-sans); font-size: 10px; letter-spacing: 2px;
+  color: var(--paper-3); padding: 8px 2px;
 }
 .card-grid {
   display: grid;

@@ -4,8 +4,8 @@
       :connected="connected" :playing="playing"
       @open-tuning="tuningOpen = true"
       @open-queue="queueOpen = true"
-      @open-daily="openDiscover(false)"
-      @open-search="openDiscover(true)"
+      @open-daily="openDiscover('daily')"
+      @open-search="openDiscover('search')"
     />
     <HeroCard
       :state="state"
@@ -33,7 +33,7 @@
     />
     <DiscoverPage
       :open="discoverOpen"
-      :focus-search="discoverFocusSearch"
+      :variant="discoverVariant"
       :now="state.now"
       @close="discoverOpen = false"
     />
@@ -55,10 +55,10 @@ const connected = ref(false);
 const tuningOpen = ref(false);
 const queueOpen = ref(false);
 const discoverOpen = ref(false);
-const discoverFocusSearch = ref(false);
+const discoverVariant = ref('daily');   // 'daily' | 'search'
 
-function openDiscover(focusSearch) {
-  discoverFocusSearch.value = focusSearch;
+function openDiscover(variant) {
+  discoverVariant.value = variant;
   discoverOpen.value = true;
 }
 const thinking = ref(false);
@@ -202,10 +202,10 @@ function onCommand({ cmd, args }) {
       queueOpen.value = true;
       break;
     case 'daily':
-      openDiscover(false);
+      openDiscover('daily');
       break;
     case 'search':
-      openDiscover(true);
+      openDiscover('search');
       break;
     case 'anti':
     case 'antilist':
