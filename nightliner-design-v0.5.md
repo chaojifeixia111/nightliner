@@ -235,7 +235,7 @@ WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `
 | `ChatInput.vue` | 底部常驻输入 |
 | `DJLog.vue` | DJ 流式气泡(逐字)+ 系统消息 |
 | `AppHeader.vue` | masthead:wordmark + ON AIR + 文字导航 DAILY / SEARCH / QUEUE / TUNING(窄屏 ON AIR 退化为呼吸金点) |
-| `DiscoverPage.vue` | **整版页**:顶部搜索栏;空态 = 每日推荐封面卡网格;输入即搜(SONGS/ARTISTS 切换,歌手下钻热门曲);点卡/行即播、⊕ 排队;Esc/✕ 关闭 |
+| `DiscoverPage.vue` | **整版页,两个 variant**:DAILY = 今日推荐封面卡网格(无搜索栏);SEARCH = 纯搜索(SONGS/ARTISTS 切换,歌手下钻热门曲,空态只留提示);点卡/行即播、⊕ 排队;Esc/✕ 关闭 |
 | `SongCard.vue` / `SongRow.vue` / `ArtistRow.vue` | 封面卡 / 结果行 / 歌手行(playing 金色高亮) |
 | `ThinkingIndicator` | 思考中 |
 | `ws-client.js` | WS 封装(断线自动重连)+ `sendFeedback` / `playSong` 等 fetch helper |
