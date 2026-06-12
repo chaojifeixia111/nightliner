@@ -4,6 +4,7 @@
       <div class="drawer">
         <div class="drawer-header">
           <span class="drawer-title">QUEUE — {{ queue?.length || 0 }} TRACKS</span>
+          <button v-if="clearable" class="clear-btn" @click="clearQueue" title="Clear upcoming tracks">CLEAR</button>
           <button class="close-btn" @click="$emit('close')"><Icon name="x" :size="14" /></button>
         </div>
 
@@ -32,6 +33,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import Icon from './Icon.vue';
 
 const props = defineProps({
@@ -43,6 +45,12 @@ defineEmits(['close']);
 
 function isNow(song) {
   return props.now && props.now.title === song.title;
+}
+
+const clearable = computed(() => (props.queue || []).some(s => !isNow(s)));
+
+function clearQueue() {
+  fetch('/api/queue/clear', { method: 'POST' });
 }
 
 function skipTo(song) {
@@ -81,7 +89,14 @@ function skipTo(song) {
   justify-content: space-between;
   flex-shrink: 0;
 }
-.drawer-title { font-family: var(--font-sans); font-size: 10px; letter-spacing: 2px; color: var(--paper-3); }
+.drawer-title { font-family: var(--font-sans); font-size: 10px; letter-spacing: 2px; color: var(--paper-3); flex: 1; }
+.clear-btn {
+  background: none; border: none; cursor: pointer;
+  font-family: var(--font-sans); font-size: 10px; letter-spacing: 2px;
+  color: var(--paper-4); padding: 4px 8px;
+  transition: color 0.18s;
+}
+.clear-btn:hover { color: var(--gold); }
 .close-btn {
   background: none; border: none; color: var(--paper-3);
   width: 28px; height: 28px; cursor: pointer;

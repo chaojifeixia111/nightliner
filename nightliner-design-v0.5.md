@@ -206,6 +206,7 @@ POST /api/feedback           4 键反馈(title, artist, signal, reason?)
 POST /api/play-event         播放结束事件(ended_reason=natural 时自动进下一首)
 POST /api/skip               显式跳过(记 user_skip)
 POST /api/skip-to            跳到 queue 内指定歌
+POST /api/queue/clear        清空待播队列(正在播的歌保留为唯一一项,播完走"queue 结束")
 POST /api/previous           回上一首(playHistory)
 GET  /api/recommend          今日每日推荐(推荐池 daily 切片,带 ncm_id/pic_url;空了退回整池)
 GET  /api/search             ?q=&type=song|artist —— 歌曲(cloudsearch type=1)/ 歌手(type=100)
@@ -231,7 +232,7 @@ WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `
 | `App.vue` | WS 连接 + 状态根 + 事件分发(onFeedback/onSkip/…) |
 | `HeroCard.vue` | 封面 / 歌名 / 进度 / `<audio>` 控制 / **音量持久化(localStorage `nl_volume`,默认 33)** / ❤ 常驻 + hover 出 × 反馈面板 |
 | `TuningDrawer.vue` | **调音台**:探索档位(5 档吸附滑块,显示英文名)/ Queue 长度 |
-| `QueueDrawer.vue` | queue 预览 |
+| `QueueDrawer.vue` | queue 预览 + CLEAR 清空待播(只在有待播歌时显示,正在播的不动) |
 | `ChatInput.vue` | 底部常驻输入 |
 | `DJLog.vue` | DJ 流式气泡(逐字)+ 系统消息 |
 | `AppHeader.vue` | masthead:wordmark + ON AIR + 文字导航 DAILY / SEARCH / QUEUE / TUNING(窄屏 ON AIR 退化为呼吸金点) |
@@ -276,7 +277,7 @@ server/
   llm-logger.js         llm-calls.jsonl 落盘
   playback-coordinator.js  resolvePlayList(cloudsearch → pickBest 原唱 → songUrl)+ resolveById(手动点播按 id 直取)
   search-normalize.js   NCM 返回 → 前端统一形状(song/artist)纯函数
-  queue-ops.js          playNow/enqueue:currentQueue/now 纯变更(手动点播用)
+  queue-ops.js          playNow/enqueue/clearUpcoming:currentQueue/now 纯变更(手动点播/清空用)
   budget-enforcer.js    checkReasonHallucination(仍用);enforceSourcePoolBudget(legacy,已不在 chat 流程)
 
 prompts/

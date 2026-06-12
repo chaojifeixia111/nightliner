@@ -1,7 +1,7 @@
 // tests/queue-ops.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sameSong, playNow, enqueue } from '../server/queue-ops.js';
+import { sameSong, playNow, enqueue, clearUpcoming } from '../server/queue-ops.js';
 
 const s = (over) => ({ title: 't', artist: 'a', ncm_id: 1, url: 'u', ...over });
 
@@ -47,4 +47,26 @@ test('enqueue: now 为空时 → now=song(开始播)', () => {
   const r = enqueue([], null, s({ ncm_id: 7 }));
   assert.deepEqual(r.queue.map(x => x.ncm_id), [7]);
   assert.equal(r.now.ncm_id, 7);
+});
+
+test('clearUpcoming: 保留正在播的歌, 其余清空', () => {
+  const q = [s({ ncm_id: 1 }), s({ ncm_id: 2 }), s({ ncm_id: 3 })];
+  const r = clearUpcoming(q, q[1]);
+  assert.deepEqual(r.queue.map(x => x.ncm_id), [2]);
+  assert.equal(r.now.ncm_id, 2);
+});
+test('clearUpcoming: now=null → 全清', () => {
+  const r = clearUpcoming([s({ ncm_id: 1 })], null);
+  assert.deepEqual(r.queue, []);
+  assert.equal(r.now, null);
+});
+test('clearUpcoming: now 不在队列里也保留为唯一一项', () => {
+  const r = clearUpcoming([s({ ncm_id: 1 })], s({ ncm_id: 99 }));
+  assert.deepEqual(r.queue.map(x => x.ncm_id), [99]);
+  assert.equal(r.now.ncm_id, 99);
+});
+test('clearUpcoming: 不修改入参队列(纯函数)', () => {
+  const q = [s({ ncm_id: 1 }), s({ ncm_id: 2 })];
+  clearUpcoming(q, q[0]);
+  assert.equal(q.length, 2);
 });

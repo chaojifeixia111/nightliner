@@ -16,10 +16,10 @@ import { warmup } from './embedder.js';
 import { indexAllSongs, indexAllFeedback, indexAllChatTurns, indexMdFile } from './indexer.js';
 import { checkReasonHallucination } from './budget-enforcer.js';
 import { normalizeSearchSongs, normalizeSearchArtists, normalizeArtistSongs } from './search-normalize.js';
-import { playNow, enqueue } from './queue-ops.js';
+import { playNow, enqueue, clearUpcoming } from './queue-ops.js';
 
 const config = yaml.parse(await fs.readFile('config.yaml', 'utf8'));
-const PORT = config.server.port;
+const PORT = process.env.PORT || config.server.port; // PORT 环境变量可覆盖(开发/preview 用)
 
 const app = express();
 app.use(express.json());
@@ -360,6 +360,14 @@ app.get('/api/now', (req, res) => res.json(now));
 
 // GET /api/queue
 app.get('/api/queue', (req, res) => res.json(currentQueue));
+
+// POST /api/queue/clear — 清空待播队列(正在播的歌不动)
+app.post('/api/queue/clear', (req, res) => {
+  currentQueue = clearUpcoming(currentQueue, now).queue;
+  recordQueue({ mode: 'manual', songs: currentQueue });
+  broadcast({ type: 'queue', data: currentQueue });
+  res.json({ ok: true, queue: currentQueue });
+});
 
 // POST /api/feedback
 app.post('/api/feedback', (req, res) => {

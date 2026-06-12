@@ -19,3 +19,8 @@ export function playNow(queue, now, song) {
 export function enqueue(queue, now, song) {
   return { queue: [...queue, song], now: now || song };
 }
+
+// 清空待播队列:正在播的歌保留为唯一一项,播完自然走"queue 结束"。
+export function clearUpcoming(queue, now) {
+  return { queue: now ? [now] : [], now: now || null };
+}
