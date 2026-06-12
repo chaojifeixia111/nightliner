@@ -340,8 +340,8 @@ function cancelDislike() {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 380px;
-  height: 380px;
+  width: 480px;
+  height: 480px;
   transform: translate(-50%, -50%);
   background: radial-gradient(circle, var(--ambient-glow), transparent 70%);
   pointer-events: none;
