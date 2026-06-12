@@ -54,6 +54,11 @@ export async function cloudsearch(keywords, { limit = 5 } = {}) {
   return ncmRequest('/cloudsearch', { keywords, limit, type: 1 });
 }
 
+// 歌手搜索(cloudsearch type=100 → result.artists)
+export async function searchArtists(keywords, { limit = 20 } = {}) {
+  return ncmRequest('/cloudsearch', { keywords, limit, type: 100 });
+}
+
 export async function songDetail(ids) {
   return ncmRequest('/song/detail', { ids: ids.join(',') });
 }

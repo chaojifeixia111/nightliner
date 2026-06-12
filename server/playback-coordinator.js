@@ -141,6 +141,36 @@ async function resolveOne(p, level) {
   }
 }
 
+// 已知 ncm_id 时直接取直链(用于手动点播,跳过二次搜索)。
+// 成功 → { ...found:true };取不到直链 → { found:false, reason:'unplayable', ncm_id }。
+export async function resolveById({ ncm_id, title, artist }) {
+  const config = await getConfig();
+  const level = config.ncm.song_url_level;
+  try {
+    const urlResp = await songUrl(ncm_id, level);
+    const data0 = urlResp?.data?.[0];
+    const url = data0?.url;
+    if (!url) return { title, artist, ncm_id, found: false, reason: 'unplayable' };
+
+    let ncm_name = title, ncm_artist = artist, pic_url = null, duration_ms = 0;
+    try {
+      const detail = await songDetail([ncm_id]);
+      const d = detail?.songs?.[0];
+      if (d) {
+        ncm_name = d.name || title;
+        ncm_artist = (d.ar || []).map(a => a.name).join(' / ') || artist;
+        pic_url = d.al?.picUrl || null;
+        duration_ms = d.dt || 0;
+      }
+    } catch { /* 详情失败不致命,直链已拿到 */ }
+
+    return { title, artist, ncm_id, url, pic_url, duration_ms, ncm_name, ncm_artist, found: true };
+  } catch (e) {
+    console.warn(`[playback] resolveById ${ncm_id} 失败: ${e.message}`);
+    return { title, artist, ncm_id, found: false, reason: 'unplayable' };
+  }
+}
+
 // 给一个 play[],返回 [{ title, artist, ncm_id, url, duration_ms, found: true|false }, ...]
 // 每首歌相互独立 → 并行解析(顺序由 Promise.all 保持,与 play[] 对齐)
 export async function resolvePlayList(plays) {
