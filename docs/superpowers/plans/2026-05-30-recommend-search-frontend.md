@@ -1,22 +1,23 @@
 # 每日推荐 + 搜索 前端入口 Implementation Plan
 
-> **状态(2026-06-12)**:已规划、**未实现**。所有 task 均未开始;实现前先对照 nightliner-design-v0.5.md 核对接口现状。
+> **状态(2026-06-12)**:已规划、**未实现**,所有 task 均未开始。2026-06-12 改版:前端从双抽屉改为「夜刊整版页」(Task 5–7 已按新方向重写);后端 Task 1–4 不变。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 给 NightlinerFM 加两个顶栏入口——网易云「每日推荐」浏览 + 歌曲/歌手「搜索」——点歌即播、⊕ 加队列,复用现有播放链路。
+**Goal:** 给 NightlinerFM 加 masthead 入口(DAILY / SEARCH)——打开同一个夜刊风整版页:空态是每日推荐封面卡网格,输入即搜(歌曲/歌手 + 下钻);点卡/行即播、⊕ 加队列,复用现有播放链路。
 
-**Architecture:** 后端把已有的 NCM 能力暴露成 4 个接口(recommend / search / artist-songs / play),纯逻辑(结果归一化、队列变更)抽成可单测的小模块;前端加两个右滑抽屉(复用 `QueueDrawer` 模式)+ 两个共用行组件,抽屉自包含调接口,播放经 ws 广播 `now`/`queue` 驱动现有 `<audio>`。
+**Architecture:** 后端把已有的 NCM 能力暴露成 4 个接口(recommend / search / artist-songs / play),纯逻辑(结果归一化、队列变更)抽成可单测的小模块;前端加一个整版覆盖层 `DiscoverPage`(night-issue token:ink/paper/gold + serif)+ 三个行/卡组件,页面自包含调接口,播放经 ws 广播 `now`/`queue` 驱动现有 `<audio>`。
 
 **Tech Stack:** Node + Express + ws(后端);Vue 3 + Vite(PWA);`node:test`(后端单测);NeteaseCloudMusicApi(127.0.0.1:3000)。
 
-**关联 spec:** `docs/superpowers/specs/2026-05-30-recommend-search-frontend-design.md`
+**关联 spec:** `docs/superpowers/specs/2026-05-30-recommend-search-frontend-design.md`(2026-06-12 改版)
 
 **约定:**
 - 在独立分支/worktree 上执行(由 using-git-worktrees 在执行期创建)。
 - 每个 commit message 末尾加一行:`Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`(下方示例省略)。
 - 后端单测命令:`node --env-file=.env --test --test-concurrency=1 "tests/**/*.test.js"`(单文件:`node --test tests/<file>.test.js`)。
 - 前端可视验证前置:NCM API(`scripts/start-ncm-api.ps1`)、`data/netease-cookie.txt` 有效、`node --env-file=.env server/index.js` 已起、`cd pwa && npm run dev` 开 vite(:5173 代理 /api、/stream 到 :8080)。
+- 前端 chrome 文案一律英文短句、不带感叹号(见 memory: no AI-flavored copy);样式只用 night-issue token(`--ink-*` `--paper-*` `--gold` `--rule` `--negative`),图标一律走 `Icon.vue`。
 
 ---
 
@@ -274,7 +275,7 @@ git commit -m "feat(server): add pure queue play-now/enqueue ops"
 
 **Files:**
 - Modify: `server/ncm-client.js`(文件末尾,`personalFm` 之后)
-- Modify: `server/playback-coordinator.js`(`resolvePlayList` 之前/之后加 `resolveById`)
+- Modify: `server/playback-coordinator.js`(`resolvePlayList` 之前加 `resolveById`)
 
 - [ ] **Step 1: ncm-client 加歌手两接口**
 
@@ -484,18 +485,30 @@ git commit -m "feat(server): add recommend/search/artist-songs/play endpoints"
 
 ---
 
-## Task 5: 共用行组件 + 播放 helper
+## Task 5: Icon 路径 + playSong helper + 行/卡组件
 
 **Files:**
+- Modify: `pwa/src/components/Icon.vue`(PATHS 增补)
+- Modify: `pwa/src/ws-client.js`(加 `playSong`)
 - Create: `pwa/src/components/SongRow.vue`
 - Create: `pwa/src/components/ArtistRow.vue`
-- Modify: `pwa/src/ws-client.js`
+- Create: `pwa/src/components/SongCard.vue`
 
-- [ ] **Step 1: ws-client 加 `playSong`**
+- [ ] **Step 1: Icon.vue 增补 4 个 lucide 路径**
+
+在 `pwa/src/components/Icon.vue` 的 `PATHS` 对象末尾(`'x'` 之后)追加:
+```js
+  'search': '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  'plus': '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  'chevron-left': '<path d="m15 18-6-6 6-6"/>',
+  'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+```
+
+- [ ] **Step 2: ws-client 加 `playSong`**
 
 `pwa/src/ws-client.js` 末尾追加:
 ```js
-// 手动点播/排队;mode: 'now' | 'queue'。返回 { ok, song? , reason? }。
+// 手动点播/排队;mode: 'now' | 'queue'。返回 { ok, song?, reason? }。
 export function playSong(song, mode) {
   return fetch('/api/play', {
     method: 'POST',
@@ -505,305 +518,219 @@ export function playSong(song, mode) {
 }
 ```
 
-- [ ] **Step 2: SongRow.vue**
+- [ ] **Step 3: SongRow.vue(搜索结果行)**
 
 `pwa/src/components/SongRow.vue`:
 ```vue
 <template>
-  <div class="song-row" :class="{ cur: isNow }" @click="$emit('play', song)" :title="`播放: ${song.name}`">
-    <div class="thumb" :style="song.pic_url ? { backgroundImage: `url(${song.pic_url})` } : null"></div>
-    <div class="meta">
-      <div class="name">{{ song.name }}<span v-if="isNow" class="now-tag"> ▸ 正在播</span></div>
-      <div class="artist">{{ song.artist }}</div>
-    </div>
-    <button class="add" @click.stop="$emit('queue', song)" title="加入队列末尾">⊕</button>
+  <div class="song-row" :class="{ current: isNow }" @click="$emit('play', song)" :title="`Play ${song.name}`">
+    <span class="name">{{ song.name }}</span>
+    <span class="artist">{{ song.artist }}</span>
+    <button class="add" @click.stop="$emit('queue', song)" :aria-label="`Queue ${song.name}`">
+      <Icon name="plus" :size="14" />
+    </button>
   </div>
 </template>
 
 <script setup>
+import Icon from './Icon.vue';
+
 defineProps({ song: Object, isNow: Boolean });
 defineEmits(['play', 'queue']);
 </script>
 
 <style scoped>
 .song-row {
-  display: flex; align-items: center; gap: 9px; padding: 7px 6px;
-  cursor: pointer; border-left: 3px solid transparent; border-radius: 2px;
-  transition: background 0.1s;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; font-size: 13px; color: var(--paper-3);
+  cursor: pointer; transition: background 0.1s;
+  border-left: 2px solid transparent;
 }
-.song-row:hover { background: rgba(74, 127, 219, 0.08); }
-.song-row.cur {
-  background: var(--blue-glow); border-left-color: var(--accent);
-  box-shadow: inset 0 0 22px rgba(74, 127, 219, 0.07);
-}
-.thumb {
-  width: 30px; height: 30px; flex-shrink: 0; border: 1px solid var(--border);
-  background-size: cover; background-position: center;
-  background-color: #0a1024;
-}
-.meta { flex: 1; min-width: 0; }
-.name {
-  font-size: 12px; color: var(--text); white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis;
-}
-.song-row.cur .name { color: var(--accent); }
-.now-tag { color: var(--accent); font-size: 10px; }
-.artist {
-  font-size: 10px; color: var(--text-dim); white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; opacity: 0.8;
-}
+.song-row:hover { background: rgba(194, 163, 107, 0.07); }
+.song-row.current { border-left-color: var(--gold); color: var(--gold); }
+.name { font-family: var(--font-serif); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artist { font-family: var(--font-sans); font-size: 11px; color: var(--paper-4); text-align: right; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+.song-row.current .artist { color: var(--gold); }
 .add {
-  flex-shrink: 0; width: 22px; height: 22px; border: 1px solid var(--border);
-  border-radius: 2px; background: none; color: var(--text-dim);
-  font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: color 0.15s, border-color 0.15s;
+  background: none; border: none; padding: 0; flex-shrink: 0;
+  width: 24px; height: 24px; cursor: pointer; color: var(--paper-4);
+  display: flex; align-items: center; justify-content: center;
+  transition: color 0.18s;
 }
-.add:hover { color: var(--accent); border-color: var(--blue); }
+.add:hover { color: var(--paper-0); }
 </style>
 ```
 
-- [ ] **Step 3: ArtistRow.vue**
+- [ ] **Step 4: ArtistRow.vue(歌手行)**
 
 `pwa/src/components/ArtistRow.vue`:
 ```vue
 <template>
-  <div class="artist-row" @click="$emit('open', artist)" :title="`查看: ${artist.name}`">
-    <div class="avatar" :style="artist.pic_url ? { backgroundImage: `url(${artist.pic_url})` } : null"></div>
-    <div class="name">{{ artist.name }}</div>
-    <span class="chev">›</span>
+  <div class="artist-row" @click="$emit('open', artist)" :title="`Open ${artist.name}`">
+    <img v-if="artist.pic_url" :src="artist.pic_url" :alt="artist.name" class="avatar" loading="lazy" />
+    <span v-else class="avatar avatar-empty"></span>
+    <span class="name">{{ artist.name }}</span>
+    <Icon name="chevron-right" :size="14" class="chev" />
   </div>
 </template>
 
 <script setup>
+import Icon from './Icon.vue';
+
 defineProps({ artist: Object });
 defineEmits(['open']);
 </script>
 
 <style scoped>
 .artist-row {
-  display: flex; align-items: center; gap: 10px; padding: 7px 6px;
-  cursor: pointer; border-left: 3px solid transparent; border-radius: 2px;
-  transition: background 0.1s;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; cursor: pointer; transition: background 0.1s;
+  border-left: 2px solid transparent;
 }
-.artist-row:hover { background: rgba(74, 127, 219, 0.08); }
+.artist-row:hover { background: rgba(194, 163, 107, 0.07); }
 .avatar {
-  width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%;
-  border: 1px solid var(--border); background-size: cover; background-position: center;
-  background-color: #0a1024;
+  width: 30px; height: 30px; border-radius: 50%;
+  object-fit: cover; flex-shrink: 0;
+  background: var(--ink-2); display: inline-block;
 }
-.name { flex: 1; min-width: 0; font-size: 12px; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chev { color: var(--text-dim); font-size: 15px; flex-shrink: 0; }
+.name { font-family: var(--font-serif); font-size: 13px; color: var(--paper-1); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chev { color: var(--paper-4); flex-shrink: 0; }
 </style>
 ```
 
-- [ ] **Step 4: 可视确认(随 Task 6/7 抽屉一起看到)**
+- [ ] **Step 5: SongCard.vue(每日推荐封面卡)**
 
-本任务无独立 UI 入口;组件会在 Task 6(SongRow)、Task 7(SongRow + ArtistRow)里被抽屉渲染验证。
-
-- [ ] **Step 5: commit**
-
-```bash
-git add pwa/src/components/SongRow.vue pwa/src/components/ArtistRow.vue pwa/src/ws-client.js
-git commit -m "feat(pwa): add SongRow/ArtistRow components + playSong helper"
-```
-
----
-
-## Task 6: 每日推荐抽屉 + ♪ 入口
-
-**Files:**
-- Create: `pwa/src/components/RecommendDrawer.vue`
-- Modify: `pwa/src/components/AppHeader.vue`
-- Modify: `pwa/src/App.vue`
-
-- [ ] **Step 1: RecommendDrawer.vue**
-
-`pwa/src/components/RecommendDrawer.vue`:
+`pwa/src/components/SongCard.vue`:
 ```vue
 <template>
-  <transition name="drawer">
-    <div v-if="open" class="drawer-overlay" @click.self="$emit('close')">
-      <div class="drawer">
-        <div class="drawer-header">
-          <span class="drawer-title">┌─ 每日推荐 · {{ songs.length }} ─┐</span>
-          <button class="close-btn" @click="$emit('close')">✕</button>
-        </div>
-        <div class="cap">网易云 · 每天更新 · 用你的账号拉取</div>
-        <div v-if="toast" class="toast">{{ toast }}</div>
-
-        <div class="body">
-          <div v-if="loading" class="hint">加载中…</div>
-          <div v-else-if="!songs.length" class="hint">今天的每日推荐没拉到 —— 检查网易云登录或稍后再试</div>
-          <SongRow
-            v-for="s in songs" :key="s.ncm_id"
-            :song="s" :is-now="isNow(s)"
-            @play="onPlay" @queue="onQueue"
-          />
-        </div>
-      </div>
+  <div class="song-card" :class="{ current: isNow }" @click="$emit('play', song)" :title="`Play ${song.name}`">
+    <div class="cover">
+      <img v-if="song.pic_url" :src="song.pic_url" :alt="song.name" loading="lazy" />
+      <Icon v-else name="disc" :size="28" class="cover-empty" />
+      <button class="add" @click.stop="$emit('queue', song)" :aria-label="`Queue ${song.name}`">
+        <Icon name="plus" :size="13" />
+      </button>
     </div>
-  </transition>
+    <div class="name">{{ song.name }}</div>
+    <div class="artist">{{ song.artist }}<span v-if="isNow" class="playing-tag"> · playing</span></div>
+  </div>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
-import SongRow from './SongRow.vue';
-import { playSong } from '../ws-client.js';
+import Icon from './Icon.vue';
 
-const props = defineProps({ open: Boolean, now: Object });
-defineEmits(['close']);
-
-const songs = ref([]);
-const loading = ref(false);
-const toast = ref('');
-let loaded = false;
-
-watch(() => props.open, (isOpen) => {
-  if (isOpen && (!loaded || !songs.value.length)) load();
-});
-
-async function load() {
-  loading.value = true;
-  try {
-    const r = await fetch('/api/recommend').then(r => r.json());
-    songs.value = r.songs || [];
-    loaded = true;
-  } catch { songs.value = []; }
-  finally { loading.value = false; }
-}
-
-function isNow(s) {
-  return props.now && (props.now.ncm_id === s.ncm_id || props.now.title === s.name);
-}
-function flashToast(msg) { toast.value = msg; setTimeout(() => { toast.value = ''; }, 2500); }
-async function onPlay(s) {
-  const r = await playSong(s, 'now');
-  if (!r.ok) flashToast(r.reason === 'unplayable' ? '这首拿不到,可能 VIP 或无版权' : '没找到可播的原唱');
-}
-async function onQueue(s) {
-  const r = await playSong(s, 'queue');
-  flashToast(r.ok ? `已加入队列:${s.name}` : '这首拿不到,没能加入队列');
-}
+defineProps({ song: Object, isNow: Boolean });
+defineEmits(['play', 'queue']);
 </script>
 
 <style scoped>
-.drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; display: flex; justify-content: flex-end; }
-.drawer { background: var(--panel); border-left: 1px solid var(--border); width: 340px; max-width: 90vw; height: 100%; padding: 24px 20px; display: flex; flex-direction: column; gap: 10px; }
-.drawer-header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-.drawer-title { font-size: 11px; color: var(--text-dim); letter-spacing: 1px; }
-.close-btn { background: none; border: 1px solid var(--border); color: var(--text-dim); width: 28px; height: 28px; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; }
-.close-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
-.cap { font-size: 9px; color: var(--text-dim); opacity: 0.7; flex-shrink: 0; }
-.toast { font-size: 11px; color: var(--accent); border: 1px solid var(--blue); background: var(--blue-glow); padding: 6px 8px; border-radius: 3px; flex-shrink: 0; }
-.body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-.hint { font-size: 12px; color: var(--text-dim); padding: 12px 4px; text-align: center; }
-.drawer-enter-active, .drawer-leave-active { transition: transform 0.25s ease; }
-.drawer-enter-from, .drawer-leave-to { transform: translateX(100%); }
+.song-card { cursor: pointer; min-width: 0; }
+.cover {
+  position: relative; aspect-ratio: 1;
+  border: 1px solid var(--ink-2); border-radius: 6px;
+  overflow: hidden; background: var(--ink-1);
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.18s;
+}
+.song-card:hover .cover { border-color: var(--rule); }
+.song-card.current .cover { border-color: var(--gold); }
+.cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cover-empty { color: var(--paper-4); }
+.add {
+  position: absolute; top: 6px; right: 6px;
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--paper-3); background: rgba(19, 17, 16, 0.6);
+  color: var(--paper-1); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: color 0.18s, border-color 0.18s;
+}
+.add:hover { color: var(--gold); border-color: var(--gold); }
+.name {
+  font-family: var(--font-serif); font-size: 13px; color: var(--paper-1);
+  margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.song-card.current .name { color: var(--gold); }
+.artist {
+  font-family: var(--font-sans); font-size: 11px; color: var(--paper-4);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.playing-tag { color: var(--gold); }
 </style>
 ```
 
-- [ ] **Step 2: AppHeader 加 ♪ 图标**
+- [ ] **Step 6: 构建检查**
 
-`pwa/src/components/AppHeader.vue` —— 在 `header-actions` 里、`☰` 之前加按钮,并扩展 emits:
-```html
-    <div class="header-actions">
-      <button class="icon-btn" title="每日推荐" @click="$emit('open-recommend')">♪</button>
-      <button class="icon-btn" title="队列" @click="$emit('open-queue')">☰</button>
-      <button class="icon-btn" title="调音台" @click="$emit('open-tuning')">⚙</button>
-    </div>
-```
-```js
-defineEmits(['open-tuning', 'open-queue', 'open-recommend', 'open-search']);
-```
-(`open-search` 一并加上,Task 7 用。)
+Run: `cd pwa && npm run build`
+Expected: 构建成功(组件在 Task 6 被 DiscoverPage 渲染后做可视验证)。
 
-- [ ] **Step 3: App.vue 接线**
-
-`pwa/src/App.vue`:
-1. import + ref:
-```js
-import RecommendDrawer from './components/RecommendDrawer.vue';
-const recommendOpen = ref(false);
-```
-2. AppHeader 上接事件:
-```html
-<AppHeader
-  @open-tuning="tuningOpen = true"
-  @open-queue="queueOpen = true"
-  @open-recommend="recommendOpen = true"
-/>
-```
-3. 在 `<QueueDrawer .../>` 之后渲染:
-```html
-<RecommendDrawer :open="recommendOpen" :now="state.now" @close="recommendOpen = false" />
-```
-
-- [ ] **Step 4: 可视验证**
-
-前置就绪后 `cd pwa && npm run dev`,开 http://localhost:5173:
-- [ ] 顶栏出现 ♪;点开右滑抽屉,标题 `┌─ 每日推荐 · N ─┐`,列出带封面的歌。
-- [ ] 点某一行 → HeroCard 立即换歌播放(`now` 变),抽屉保持打开,当前行显示「▸ 正在播」高亮。
-- [ ] 点某行 ⊕ → 顶部 toast「已加入队列」;打开 ☰ 队列抽屉能看到它在末尾;当前歌没被打断。
-- [ ] 视觉与现有抽屉一致(同字体/边框/蓝辉光)。截图留档。
-
-- [ ] **Step 5: commit**
+- [ ] **Step 7: commit**
 
 ```bash
-git add pwa/src/components/RecommendDrawer.vue pwa/src/components/AppHeader.vue pwa/src/App.vue
-git commit -m "feat(pwa): daily-recommend drawer + header entry"
+git add pwa/src/components/Icon.vue pwa/src/ws-client.js pwa/src/components/SongRow.vue pwa/src/components/ArtistRow.vue pwa/src/components/SongCard.vue
+git commit -m "feat(pwa): song/artist rows + daily card + playSong helper + new icons"
 ```
 
 ---
 
-## Task 7: 搜索抽屉(歌曲/歌手 + 下钻)+ 🔍 入口
+## Task 6: DiscoverPage 整版页组件
 
 **Files:**
-- Create: `pwa/src/components/SearchDrawer.vue`
-- Modify: `pwa/src/App.vue`
+- Create: `pwa/src/components/DiscoverPage.vue`
 
-- [ ] **Step 1: SearchDrawer.vue**
+- [ ] **Step 1: 写组件(完整)**
 
-`pwa/src/components/SearchDrawer.vue`:
+`pwa/src/components/DiscoverPage.vue`:
 ```vue
 <template>
-  <transition name="drawer">
-    <div v-if="open" class="drawer-overlay" @click.self="$emit('close')">
-      <div class="drawer">
-        <div class="drawer-header">
-          <span class="drawer-title">┌─ 搜索 ─┐</span>
-          <button class="close-btn" @click="$emit('close')">✕</button>
+  <transition name="page">
+    <div v-if="open" class="page-overlay">
+      <div class="page-col">
+        <div class="top-row">
+          <div class="search-bar" :class="{ active: query.trim() }">
+            <Icon name="search" :size="15" class="search-ic" />
+            <input ref="box" v-model="query" placeholder="Search songs or artists…" />
+            <button v-if="query" class="ghost" @click="query = ''" aria-label="Clear">
+              <Icon name="x" :size="13" />
+            </button>
+          </div>
+          <button class="ghost close" @click="$emit('close')" aria-label="Close">
+            <Icon name="x" :size="16" />
+          </button>
         </div>
 
-        <div class="seg">
-          <button :class="{ active: mode === 'song' }" @click="setMode('song')">歌曲</button>
-          <button :class="{ active: mode === 'artist' }" @click="setMode('artist')">歌手</button>
-        </div>
-        <input ref="box" v-model="query" class="search-input" placeholder="输入歌名或歌手…" />
         <div v-if="toast" class="toast">{{ toast }}</div>
 
         <div class="body">
-          <div v-if="loading" class="hint">搜索中…</div>
-
-          <!-- 歌手下钻:某歌手的热门曲 -->
-          <template v-else-if="mode === 'artist' && view === 'artist-songs'">
-            <div class="back" @click="view = 'artists'">‹ 返回 · {{ activeArtist?.name }}</div>
-            <div v-if="!songs.length" class="hint">该歌手暂无可播热门曲</div>
-            <SongRow v-for="s in songs" :key="s.ncm_id" :song="s" :is-now="isNow(s)" @play="onPlay" @queue="onQueue" />
+          <template v-if="!query.trim()">
+            <div class="section-label">TODAY — {{ dateLabel }}<span v-if="daily.length"> · {{ daily.length }} TRACKS</span></div>
+            <div v-if="dailyLoading" class="hint">Loading…</div>
+            <div v-else-if="!daily.length" class="hint">Couldn't fetch today's picks — check NetEase login.</div>
+            <div v-else class="card-grid">
+              <SongCard v-for="s in daily" :key="s.ncm_id" :song="s" :is-now="isNow(s)" @play="onPlay" @queue="onQueue" />
+            </div>
           </template>
 
-          <!-- 歌手结果列表 -->
-          <template v-else-if="mode === 'artist'">
-            <div v-if="!query" class="hint">输入歌手名开始搜索</div>
-            <div v-else-if="!artists.length" class="hint">没找到「{{ query }}」的歌手</div>
-            <ArtistRow v-for="a in artists" :key="a.artist_id" :artist="a" @open="openArtist" />
-          </template>
-
-          <!-- 歌曲结果列表 -->
           <template v-else>
-            <div v-if="!query" class="hint">输入歌名开始搜索</div>
-            <div v-else-if="!songs.length" class="hint">没找到「{{ query }}」的歌曲</div>
-            <SongRow v-for="s in songs" :key="s.ncm_id" :song="s" :is-now="isNow(s)" @play="onPlay" @queue="onQueue" />
+            <div class="seg">
+              <button :class="{ active: mode === 'song' }" @click="mode = 'song'">SONGS</button>
+              <button :class="{ active: mode === 'artist' }" @click="mode = 'artist'">ARTISTS</button>
+            </div>
+            <div v-if="loading" class="hint">Searching…</div>
+            <template v-else-if="mode === 'artist' && view === 'artist-songs'">
+              <button class="back" @click="view = 'artists'">
+                <Icon name="chevron-left" :size="13" /> {{ activeArtist?.name }} — TOP SONGS
+              </button>
+              <div v-if="!songs.length" class="hint">No playable tracks for this artist.</div>
+              <SongRow v-for="s in songs" :key="s.ncm_id" :song="s" :is-now="isNow(s)" @play="onPlay" @queue="onQueue" />
+            </template>
+            <template v-else-if="mode === 'artist'">
+              <div v-if="!artists.length" class="hint">Nothing found for "{{ query.trim() }}".</div>
+              <ArtistRow v-for="a in artists" :key="a.artist_id" :artist="a" @open="openArtist" />
+            </template>
+            <template v-else>
+              <div v-if="!songs.length" class="hint">Nothing found for "{{ query.trim() }}".</div>
+              <SongRow v-for="s in songs" :key="s.ncm_id" :song="s" :is-now="isNow(s)" @play="onPlay" @queue="onQueue" />
+            </template>
           </template>
         </div>
       </div>
@@ -812,39 +739,74 @@ git commit -m "feat(pwa): daily-recommend drawer + header entry"
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, onUnmounted } from 'vue';
+import Icon from './Icon.vue';
+import SongCard from './SongCard.vue';
 import SongRow from './SongRow.vue';
 import ArtistRow from './ArtistRow.vue';
 import { playSong } from '../ws-client.js';
 
-const props = defineProps({ open: Boolean, now: Object });
-defineEmits(['close']);
+const props = defineProps({ open: Boolean, focusSearch: Boolean, now: Object });
+const emit = defineEmits(['close']);
 
-const mode = ref('song');         // 'song' | 'artist'
-const view = ref('artists');      // artist 模式内:'artists' | 'artist-songs'
 const query = ref('');
+const mode = ref('song');          // 'song' | 'artist'
+const view = ref('artists');       // artist 模式内:'artists' | 'artist-songs'
+const daily = ref([]);
+const dailyLoading = ref(false);
+let dailyLoaded = false;
 const songs = ref([]);
 const artists = ref([]);
 const activeArtist = ref(null);
 const loading = ref(false);
 const toast = ref('');
 const box = ref(null);
-
 let timer = null;
+let toastTimer = null;
+
+const DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+const dateLabel = computed(() => {
+  const d = new Date();
+  return `${DAYS[d.getDay()]} · ${String(d.getDate()).padStart(2, '0')} ${MONTHS[d.getMonth()]}`;
+});
+
+function onKey(e) {
+  if (e.key === 'Escape') emit('close');
+}
 
 watch(() => props.open, (isOpen) => {
-  if (isOpen) nextTick(() => box.value?.focus());
+  if (isOpen) {
+    window.addEventListener('keydown', onKey);
+    if (!dailyLoaded || !daily.value.length) loadDaily();
+    if (props.focusSearch) nextTick(() => box.value?.focus());
+  } else {
+    window.removeEventListener('keydown', onKey);
+  }
+});
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKey);
+  clearTimeout(timer);
+  clearTimeout(toastTimer);
 });
 
 watch([query, mode], () => {
-  if (mode.value === 'artist') view.value = 'artists';
+  view.value = 'artists';
   clearTimeout(timer);
   const q = query.value.trim();
   if (!q) { songs.value = []; artists.value = []; return; }
   timer = setTimeout(runSearch, 300);
 });
 
-function setMode(m) { mode.value = m; }
+async function loadDaily() {
+  dailyLoading.value = true;
+  try {
+    const r = await fetch('/api/recommend').then(r => r.json());
+    daily.value = r.songs || [];
+    dailyLoaded = true;
+  } catch { daily.value = []; }
+  finally { dailyLoading.value = false; }
+}
 
 async function runSearch() {
   const q = query.value.trim();
@@ -874,39 +836,133 @@ async function openArtist(a) {
 }
 
 function isNow(s) {
-  return props.now && (props.now.ncm_id === s.ncm_id || props.now.title === s.name);
+  if (!props.now) return false;
+  if (props.now.ncm_id != null && s.ncm_id != null) return props.now.ncm_id === s.ncm_id;
+  return props.now.title === s.name;
 }
-function flashToast(msg) { toast.value = msg; setTimeout(() => { toast.value = ''; }, 2500); }
+
+function flashToast(msg) {
+  toast.value = msg;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.value = ''; }, 2500);
+}
+
 async function onPlay(s) {
   const r = await playSong(s, 'now');
-  if (!r.ok) flashToast(r.reason === 'unplayable' ? '这首拿不到,可能 VIP 或无版权' : '没找到可播的原唱');
+  if (!r.ok) {
+    flashToast(r.reason === 'unplayable'
+      ? "Can't play this one — VIP or region-locked."
+      : "Couldn't find a playable original.");
+  }
 }
+
 async function onQueue(s) {
   const r = await playSong(s, 'queue');
-  flashToast(r.ok ? `已加入队列:${s.name}` : '这首拿不到,没能加入队列');
+  flashToast(r.ok ? `Queued — ${s.name}` : "Can't queue this one — VIP or region-locked.");
 }
 </script>
 
 <style scoped>
-.drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; display: flex; justify-content: flex-end; }
-.drawer { background: var(--panel); border-left: 1px solid var(--border); width: 340px; max-width: 90vw; height: 100%; padding: 24px 20px; display: flex; flex-direction: column; gap: 10px; }
-.drawer-header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-.drawer-title { font-size: 11px; color: var(--text-dim); letter-spacing: 1px; }
-.close-btn { background: none; border: 1px solid var(--border); color: var(--text-dim); width: 28px; height: 28px; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; }
-.close-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
-.seg { display: flex; gap: 6px; flex-shrink: 0; }
-.seg button { flex: 1; background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-family: inherit; font-size: 11px; padding: 6px 0; cursor: pointer; border-radius: 3px; transition: all 0.15s; }
-.seg button.active { border-color: var(--blue); color: var(--accent); background: var(--blue-glow); }
-.search-input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; font-family: inherit; font-size: 12px; outline: none; border-radius: 3px; flex-shrink: 0; }
-.search-input:focus { border-color: var(--blue); }
-.toast { font-size: 11px; color: var(--accent); border: 1px solid var(--blue); background: var(--blue-glow); padding: 6px 8px; border-radius: 3px; flex-shrink: 0; }
-.body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-.hint { font-size: 12px; color: var(--text-dim); padding: 12px 4px; text-align: center; }
-.back { font-size: 11px; color: var(--accent); cursor: pointer; padding: 6px 4px; }
-.back:hover { text-decoration: underline; }
-.drawer-enter-active, .drawer-leave-active { transition: transform 0.25s ease; }
-.drawer-enter-from, .drawer-leave-to { transform: translateX(100%); }
+.page-overlay {
+  position: fixed; inset: 0;
+  background: var(--ink-0);
+  z-index: 300;
+}
+.page-col {
+  max-width: 720px; margin: 0 auto; height: 100%;
+  padding: 0 16px;
+  display: flex; flex-direction: column;
+}
+.top-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 0 0; flex-shrink: 0;
+}
+.search-bar {
+  flex: 1; display: flex; align-items: center; gap: 8px;
+  padding: 8px 2px; border-bottom: 1px solid var(--rule);
+  transition: border-color 0.18s;
+}
+.search-bar:focus-within, .search-bar.active { border-bottom-color: var(--gold); }
+.search-ic { color: var(--paper-3); flex-shrink: 0; }
+.search-bar:focus-within .search-ic, .search-bar.active .search-ic { color: var(--gold); }
+.search-bar input {
+  flex: 1; border: none; background: transparent;
+  color: var(--paper-0); font-family: var(--font-serif); font-size: 14px;
+  outline: none; padding: 0; min-width: 0;
+}
+.search-bar input::placeholder { color: var(--paper-4); }
+.ghost {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--paper-3); display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; flex-shrink: 0;
+  transition: color 0.18s;
+}
+.ghost:hover { color: var(--paper-0); }
+.toast {
+  font-family: var(--font-sans); font-size: 11px; letter-spacing: 0.5px;
+  color: var(--gold); border: 1px solid var(--gold); border-radius: 2px;
+  padding: 6px 10px; margin-top: 10px; flex-shrink: 0;
+}
+.body { flex: 1; overflow-y: auto; padding: 14px 0 24px; }
+.section-label {
+  font-family: var(--font-sans); font-size: 10px; letter-spacing: 2px;
+  color: var(--paper-3); margin-bottom: 12px;
+}
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 14px;
+}
+.hint { font-family: var(--font-sans); font-size: 12px; color: var(--paper-4); padding: 10px 0; }
+.seg { display: flex; gap: 8px; margin-bottom: 12px; }
+.seg button {
+  background: none; cursor: pointer;
+  font-family: var(--font-sans); font-size: 10px; letter-spacing: 2px;
+  color: var(--paper-3); border: 1px solid var(--ink-2); border-radius: 2px;
+  padding: 4px 12px; transition: color 0.18s, border-color 0.18s;
+}
+.seg button.active { color: var(--gold); border-color: var(--gold); }
+.back {
+  background: none; border: none; padding: 6px 0; cursor: pointer;
+  display: flex; align-items: center; gap: 4px;
+  font-family: var(--font-sans); font-size: 10px; letter-spacing: 1.5px;
+  color: var(--gold);
+}
+.page-enter-active, .page-leave-active { transition: opacity 0.22s ease, transform 0.22s ease; }
+.page-enter-from, .page-leave-to { opacity: 0; transform: translateY(16px); }
 </style>
+```
+
+- [ ] **Step 2: 构建检查**
+
+Run: `cd pwa && npm run build`
+Expected: 构建成功(还没有入口,Task 7 接线后做可视验证)。
+
+- [ ] **Step 3: commit**
+
+```bash
+git add pwa/src/components/DiscoverPage.vue
+git commit -m "feat(pwa): discover page — daily picks grid + song/artist search"
+```
+
+---
+
+## Task 7: masthead 入口 + App 接线 + 可视验证
+
+**Files:**
+- Modify: `pwa/src/components/AppHeader.vue`
+- Modify: `pwa/src/App.vue`
+
+- [ ] **Step 1: AppHeader 加 DAILY / SEARCH 链接**
+
+`pwa/src/components/AppHeader.vue` 的 `mast-actions` 里、`QUEUE` 之前加(顺序:ON AIR → DAILY → SEARCH → QUEUE → TUNING):
+```html
+        <button class="nav-link" @click="$emit('open-daily')">DAILY</button>
+        <button class="nav-link" @click="$emit('open-search')">SEARCH</button>
+```
+并扩展 emits:
+```js
+defineEmits(['open-tuning', 'open-queue', 'open-daily', 'open-search']);
 ```
 
 - [ ] **Step 2: App.vue 接线**
@@ -914,44 +970,72 @@ async function onQueue(s) {
 `pwa/src/App.vue`:
 1. import + ref:
 ```js
-import SearchDrawer from './components/SearchDrawer.vue';
-const searchOpen = ref(false);
+import DiscoverPage from './components/DiscoverPage.vue';
+const discoverOpen = ref(false);
+const discoverFocusSearch = ref(false);
+function openDiscover(focusSearch) {
+  discoverFocusSearch.value = focusSearch;
+  discoverOpen.value = true;
+}
 ```
-2. AppHeader 接事件(在已有 `@open-recommend` 旁):
+2. AppHeader 上接事件:
 ```html
-  @open-search="searchOpen = true"
+    <AppHeader
+      :connected="connected" :playing="playing"
+      @open-tuning="tuningOpen = true"
+      @open-queue="queueOpen = true"
+      @open-daily="openDiscover(false)"
+      @open-search="openDiscover(true)"
+    />
 ```
-3. 在 `<RecommendDrawer .../>` 之后渲染:
+3. 在 `<QueueDrawer .../>` 之后渲染:
 ```html
-<SearchDrawer :open="searchOpen" :now="state.now" @close="searchOpen = false" />
+    <DiscoverPage
+      :open="discoverOpen"
+      :focus-search="discoverFocusSearch"
+      :now="state.now"
+      @close="discoverOpen = false"
+    />
 ```
-4. AppHeader 加 🔍 按钮(`pwa/src/components/AppHeader.vue`,放在 ♪ 之前):
-```html
-      <button class="icon-btn" title="搜索" @click="$emit('open-search')">🔍</button>
+4. `onCommand` 的 switch 里、`case 'queue'` 之后加:
+```js
+    case 'daily':
+      openDiscover(false);
+      break;
+    case 'search':
+      openDiscover(true);
+      break;
 ```
+并在 `/help` 文案里补两行:`/daily          打开每日推荐`、`/search         打开搜索`。
 
-- [ ] **Step 3: 可视验证**
+- [ ] **Step 3: 可视验证(逐项,截图留档)**
 
-`cd pwa && npm run dev`,http://localhost:5173:
-- [ ] 顶栏出现 🔍;点开抽屉,有 `歌曲 | 歌手` 切换 + 输入框(自动聚焦)。
-- [ ] 歌曲模式:输入歌名,300ms 后出结果;点歌即播、⊕ 排队、toast 正常;无结果显示「没找到…」。
-- [ ] 歌手模式:输入歌手 → 出歌手列表(圆头像);点一个 → 「‹ 返回」+ 其热门曲;点歌即播 / ⊕ 排队;点返回回到歌手列表。
-- [ ] 切回「歌曲」或改关键词 → 视图复位、结果刷新。
-- [ ] VIP/无版权曲点播 → toast「拿不到…」,不崩。
-- [ ] 截图留档(歌曲、歌手、下钻三态)。
+前置就绪后 `cd pwa && npm run dev`,开 http://localhost:5173:
+- [ ] masthead 显示 `DAILY SEARCH QUEUE TUNING`,手机宽度(375px)不换行不挤掉 wordmark。
+- [ ] 点 DAILY → 整版页上滑淡入,栏目标签 `TODAY — {DOW} · {DD MMM} · N TRACKS`,封面卡网格(桌面 4 列左右,手机 2 列),封面图正常加载。
+- [ ] 点 SEARCH → 同一页打开且输入框自动聚焦。
+- [ ] 点某张卡 → HeroCard 立即换歌播放,页面保持打开,该卡金边 + `· playing`。
+- [ ] 点卡角 ⊕ → toast `Queued — {name}`;开 QUEUE 抽屉确认它在末尾;当前歌没被打断。
+- [ ] 输入歌名 → 300ms 后出 SongRow 结果;点行即播;⊕ 排队;无结果显示 `Nothing found for "{q}".`。
+- [ ] 切 ARTISTS → 输入歌手 → 歌手列表(圆头像);点一行 → `‹ {歌手} — TOP SONGS` + 热门曲;返回正常;切回 SONGS 或改词视图复位。
+- [ ] 清空输入 → 回到今日推荐卡片。
+- [ ] VIP/无版权曲点播 → toast `Can't play this one — VIP or region-locked.`,不崩。
+- [ ] Esc 关闭;✕ 关闭;再开不重复拉每日推荐(network 面板确认)。
+- [ ] 版式与 night-issue 一致:serif 歌名、sans 小字距标签、金色只用于 active/playing。
 
 - [ ] **Step 4: commit**
 
 ```bash
-git add pwa/src/components/SearchDrawer.vue pwa/src/components/AppHeader.vue pwa/src/App.vue
-git commit -m "feat(pwa): search drawer (song/artist + drill-down) + header entry"
+git add pwa/src/components/AppHeader.vue pwa/src/App.vue
+git commit -m "feat(pwa): masthead DAILY/SEARCH entries + discover wiring"
 ```
 
 ---
 
-## Task 8: 回归 + 收尾
+## Task 8: 回归 + 文档同步 + 收尾
 
-**Files:** 无新增(验证为主)
+**Files:**
+- Modify: `nightliner-design-v0.5.md`(补手动点播小节)
 
 - [ ] **Step 1: 后端全量单测**
 
@@ -966,35 +1050,42 @@ curl -s -X POST "http://localhost:8080/api/chat" -H "Content-Type: application/j
 ```
 Expected:`{"ok":true,...}`;服务日志出现 `[recommend] pool refreshed: N songs` 与 `[chat] intent=recommend`。
 
-- [ ] **Step 3: 前端构建通过**
+- [ ] **Step 3: 前端生产构建**
 
 Run: `cd pwa && npm run build`
-Expected: 构建成功,无报错(确认生产构建也 OK)。
+Expected: 构建成功,无报错。
 
 - [ ] **Step 4: 端到端可视烟测**
 
-`node --env-file=.env server/index.js` + 访问构建产物(server 静态托管 `pwa/dist`)或 vite dev:
-- [ ] 每日推荐:点播 + ⊕ 排队。
-- [ ] 搜索:歌曲、歌手、歌手下钻,各点播一次。
-- [ ] 三个抽屉(♪ 🔍 ☰)互不打架;关闭/打开正常。
+`node --env-file=.env server/index.js` + 访问构建产物(server 静态托管 `pwa/dist`):
+- [ ] DAILY:点卡即播 + ⊕ 排队。
+- [ ] SEARCH:歌曲、歌手、歌手下钻,各点播一次。
+- [ ] 整版页与 QUEUE / TUNING 抽屉互不打架;关闭/打开正常。
 
-- [ ] **Step 5: 最终 commit(若有未提交收尾)**
+- [ ] **Step 5: 同步 nightliner-design-v0.5.md(维护纪律)**
+
+`/api/play` 是新的播放行为入口(手动点播绕过 DJ),按 CLAUDE.md 纪律在 v0.5 文档补一小节「手动点播(DAILY / SEARCH 整版页)」:4 个接口一览、mode now/queue 的队列语义(插当前歌之后 / 追加队尾)、不校验 anti/cooldown 的原因、play-event 照常由前端上报。
+
+- [ ] **Step 6: 最终 commit**
 
 ```bash
-git add -A
-git commit -m "chore: recommend+search feature regression pass"
+git add nightliner-design-v0.5.md
+git commit -m "docs(design): document manual playback entries (daily/search page)"
 ```
 
 ---
 
 ## 自检(spec 覆盖核对)
 
-- 每日推荐入口(♪ + 抽屉 + GET /api/recommend + 保留 id/封面)→ Task 4 §2/§3、Task 6 ✓
-- 搜索-歌曲(🔍 + 抽屉 + GET /api/search?type=song)→ Task 4、Task 7 ✓
-- 搜索-歌手 + 下钻(type=artist + /api/artist/songs + ArtistRow + 两级视图)→ Task 3、Task 4、Task 5、Task 7 ✓
-- 点即播(mode=now 插当前之后)/ ⊕ 排队(mode=queue)→ Task 2、Task 4、Task 5/6/7 ✓
+- 每日推荐整版态(DAILY 入口 + SongCard 网格 + GET /api/recommend + 保留 id/封面)→ Task 4 §2/§3、Task 5、Task 6、Task 7 ✓
+- 搜索栏 + 歌曲搜索(SEARCH 入口聚焦 + type=song)→ Task 4、Task 6、Task 7 ✓
+- 歌手搜索 + 下钻(type=artist + /api/artist/songs + ArtistRow + view 状态机)→ Task 3、Task 4、Task 5、Task 6 ✓
+- 一页两用(空态推荐 / 输入即搜 / 清空复原)→ Task 6 ✓
+- 点即播(mode=now 插当前之后)/ ⊕ 排队(mode=queue)→ Task 2、Task 4、Task 5/6 ✓
 - 复用 playback-coordinator 取原唱(resolveById / resolvePlayList)→ Task 3、Task 4 ✓
 - 不打断 DJ + play-event 由前端照常上报 → Task 4(playNow 插入而非清空)✓
-- 错误处理(空池 / 无结果 / unplayable / 网络)→ Task 4(返回体)、Task 6/7(空态 + toast)✓
-- 测试:归一化 + 队列 ops 单测;接口/前端集成与可视验证 → Task 1、2、4、6、7、8 ✓
-- 非目标(专辑/歌单、刷新、底部栏)→ 未列入任务,符合 spec ✓
+- 错误处理(空池 / 无结果 / unplayable / 网络)→ Task 4(返回体)、Task 6(空态 + toast,英文短句)✓
+- night-issue 一致性(token / Icon.vue / 英文 chrome / masthead 文字导航)→ Task 5、6、7 全程 + Task 7 Step 3 核对项 ✓
+- v0.5 文档同步(播放行为变化)→ Task 8 Step 5 ✓
+- 测试:归一化 + 队列 ops 单测;接口/前端集成与可视验证 → Task 1、2、4、7、8 ✓
+- 非目标(专辑/歌单、刷新、抽屉方案)→ 未列入任务,符合 spec ✓
