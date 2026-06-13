@@ -3,9 +3,11 @@
 // 档位只决定该方向内「熟悉↔全新」的配比;方向本身不可被档位稀释。
 //
 // 设计取舍:
-//  - 语种用「歌名脚本」判定(title-primary)。这样 "Sad Sometimes"(黄霄雲 feat. 的 EDM)
-//    会被判成 english 而不会混进「国语」——正是用户踩过的坑。代价是英文歌名的粤语/国语歌会漏判,
-//    在本用户曲库里极少,可接受。
+//  - 语种判定 = 「艺人语种表」优先,「歌名脚本」兜底(trackLang)。
+//    纯歌名脚本对 K-pop/J-pop 会塌:绝大多数歌名是拉丁字母("Talk that Talk"/TWICE、
+//    "Lemon"/米津玄師),会被判成 english,导致「韩语/日语」方向把它们全过滤掉、候选池缩到只剩
+//    歌名带谚文/假名的那几首(用户踩过的坑:点「KPOP女声」只推回 1 首)。所以先按艺人查 ARTIST_LANG,
+//    查不到才退回歌名脚本。歌名脚本仍保「Sad Sometimes(黄霄雲 EDM)不混进国语」的老保护。
 //  - 性别无法从歌名/艺人名可靠判定 → server 不在性别上过滤,交给 LLM 按方向文案把关;
 //    但「全新」种子取自用户该语种下收藏的艺人(本就偏女声),配合 LLM 终筛,实际效果够好。
 //  - 艺人:精确匹配传入的曲库艺人名集合。
@@ -25,6 +27,40 @@ export function songLang(title) {
   if (KANA.test(t)) return 'japanese';
   if (HAN.test(t)) return 'chinese';
   return 'english';
+}
+
+// 艺人 → 语种(curated,基于 Elliot 真实曲库 + 反馈)。拉丁标题的 K/J-pop 靠它救回,
+// 歌名脚本(songLang)只作未知艺人的兜底。新增韩/日艺人往这里加即可——key 用 norm() 后的形式
+// (小写、去空格/连字符/标点)。只放「确定是韩/日」的艺人,别放中/英艺人,以免污染其它方向。
+const ARTIST_LANG = new Map(Object.entries({
+  // —— 韩语 / K-pop ——
+  twice: 'korean', blackpink: 'korean', ive: 'korean', lesserafim: 'korean',
+  sistar: 'korean', cnblue: 'korean', bigbang: 'korean', akmu: 'korean',
+  taeyang: 'korean', '태양': 'korean', 악동뮤지션: 'korean',
+  少女时代: 'korean', '소녀시대': 'korean', girlsgeneration: 'korean',
+  newjeans: 'korean', '뉴진스': 'korean', aespa: 'korean', '에스파': 'korean',
+  iu: 'korean', '아이유': 'korean',
+  // —— 日语 / J-pop ——
+  米津玄師: 'japanese', 米津玄师: 'japanese', oneokrock: 'japanese', daoko: 'japanese',
+  yoasobi: 'japanese', aimer: 'japanese', あいみょん: 'japanese', aimyon: 'japanese',
+  kinggnu: 'japanese', radwimps: 'japanese', ヨルシカ: 'japanese', yorushika: 'japanese',
+  藤井風: 'japanese', fujiikaze: 'japanese',
+}));
+
+// 从艺人串判定语种。拆分多艺人(/ × & feat with ,),逐段「精确」匹配,
+// 避免短 key(如 'ive')子串误命中('Stive Morgan' 含 'ive' 但不是韩语)。查不到返回 null。
+function artistLang(artist) {
+  if (!artist) return null;
+  for (const seg of String(artist).split(/[/×&,]|feat\.?|with/i)) {
+    const k = norm(seg).replace(/-/g, '');
+    if (k && ARTIST_LANG.has(k)) return ARTIST_LANG.get(k);
+  }
+  return null;
+}
+
+// 一首歌的有效语种:艺人语种表优先,歌名脚本兜底。方向语种过滤应当用它,而不是裸 songLang。
+export function trackLang(title, artist) {
+  return artistLang(artist) || songLang(title);
 }
 
 // 语种关键词 → 规范语种(优先级自上而下;命中即停)
@@ -96,7 +132,7 @@ export function detectDirection(message, { artistNames = [] } = {}) {
 /**
  * 一首候选歌是否符合当前方向。用于「绝不用跑偏方向的歌凑数」。
  *  - 点名艺人:艺人匹配即过(艺人优先于语种)。
- *  - 仅语种:按歌名脚本判定。
+ *  - 仅语种:按 trackLang(艺人语种表优先,歌名脚本兜底)判定。
  *  - 仅性别 / 仅情绪:server 无法判定 → 返回 true,交给 LLM。
  */
 export function songMatchesDirection(title, artist, dir) {
@@ -106,7 +142,7 @@ export function songMatchesDirection(title, artist, dir) {
     if (dir.artists.some(a => an.includes(norm(a)))) return true;
     if (!dir.langMatch) return false;  // 点了艺人又没语种兜底 → 不匹配
   }
-  if (dir.langMatch) return songLang(title) === dir.langMatch;
+  if (dir.langMatch) return trackLang(title, artist) === dir.langMatch;
   return true;
 }
 

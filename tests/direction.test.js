@@ -1,0 +1,54 @@
+// tests/direction.test.js
+// 方向语种判定:艺人感知 —— 拉丁标题的 K-pop / J-pop 不应被歌名脚本误判成 english。
+// 回归点:英文 EDM(非韩/日艺人)绝不能漏进 korean 方向;短 key("ive")不能子串误命中。
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { songMatchesDirection, trackLang } from '../server/direction.js';
+
+const KOR = { langMatch: 'korean', gender: null, artists: [], raw: 'kpop' };
+const KOR_F = { langMatch: 'korean', gender: 'female', artists: [], raw: 'kpop女声' };
+const JPN = { langMatch: 'japanese', gender: null, artists: [], raw: 'jpop' };
+const CHN = { langMatch: 'chinese', gender: null, artists: [], raw: '国语' };
+
+test('Latin-titled K-pop by known artist matches korean direction', () => {
+  // 用户曲库真实存在、且 [love] 过的歌 —— 现在被歌名脚本判成 english 而漏掉
+  assert.equal(songMatchesDirection('Talk that Talk', 'TWICE', KOR), true);
+  assert.equal(songMatchesDirection('What is Love?', 'TWICE', KOR), true);
+  assert.equal(songMatchesDirection('Off The Record', 'IVE', KOR), true);
+  assert.equal(songMatchesDirection('Good Parts (when the quality is bad but I am)', 'LE SSERAFIM', KOR), true);
+});
+
+test('Latin-titled K-pop matches korean even with gender on direction (gender left to LLM)', () => {
+  assert.equal(songMatchesDirection('Talk that Talk', 'TWICE', KOR_F), true);
+});
+
+test('Hangul-titled K-pop still matches korean (no regression from title path)', () => {
+  assert.equal(songMatchesDirection('바빠', 'SISTAR', KOR), true);
+  assert.equal(songMatchesDirection('눈,코,입', '太阳', KOR), true);
+});
+
+test('Latin-titled J-pop by known artist matches japanese direction', () => {
+  assert.equal(trackLang('Lemon', '米津玄師'), 'japanese');
+  assert.equal(songMatchesDirection('Lemon', '米津玄師', JPN), true);
+});
+
+test('English EDM by non-K/J artist does NOT bleed into korean direction', () => {
+  assert.equal(songMatchesDirection('Feel Good', 'Gryffin / ILLENIUM / Daya', KOR), false);
+  assert.equal(songMatchesDirection('Try', 'Colbie Caillat', KOR), false);
+});
+
+test('short artist key "ive" must not substring-match unrelated artists', () => {
+  // 'Stive Morgan' 含子串 'ive',绝不能被判成 korean
+  assert.equal(trackLang('Witch Dance', 'Stive Morgan'), 'english');
+  assert.equal(songMatchesDirection('Witch Dance', 'Stive Morgan', KOR), false);
+});
+
+test('known Korean artist in a collab segment is detected', () => {
+  // 多艺人串,韩/日艺人不在首位也应识别
+  assert.equal(trackLang('Some Collab', 'DJ Snake / TWICE'), 'korean');
+});
+
+test('chinese direction unaffected (Han-title still chinese)', () => {
+  assert.equal(songMatchesDirection('寂寞寂寞就好', '田馥甄', CHN), true);
+  assert.equal(songMatchesDirection('Talk that Talk', 'TWICE', CHN), false);
+});

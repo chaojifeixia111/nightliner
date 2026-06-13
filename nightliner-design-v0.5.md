@@ -107,11 +107,13 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
 用户点名**语种 / 性别 / 艺人**(如"国语女声"、"英文男声"、"放点孙燕姿")即为**硬约束**,本批每首都必须落在方向内;档位只决定方向内的「熟悉↔全新」配比。
 
 - **检测**:语种关键词(国语/中文/英文/韩语/日语…)+ 性别关键词(女声/男声)+ 点名艺人(匹配曲库艺人名)。
-- **`songLang(title)` 以歌名脚本判定**(title-primary):latin 标题 → english,**即使艺人含中文**。这是有意为之——把 "Sad Sometimes"(黄霄雲 feat. 的英文 EDM)排除出"国语",正是踩过的坑。代价:英文标题的粤语/国语歌会漏判(本库极少)。
+- **语种判定 = `trackLang(title, artist)`:艺人语种表优先,歌名脚本兜底**(2026-06-13)。`direction.js` 内置 `ARTIST_LANG`(Elliot 真实曲库 + 反馈里的韩/日艺人:TWICE / IVE / BIGBANG / LE SSERAFIM / 米津玄師 / ONE OK ROCK…),命中即定语种,**无视拉丁标题**;查不到才退回 `songLang(title)`(歌名脚本,title-primary)。
+  - **为何**:纯歌名脚本对 K-pop/J-pop 会塌——绝大多数歌名是拉丁字母("Talk that Talk"/TWICE、"Lemon"/米津玄師),被判 english,导致"韩语/日语"方向把它们全过滤掉,候选池缩到只剩歌名带谚文/假名的极少数。**实测坑:点「KPOP女声」整池只剩 1 首(바빠/SISTAR),其余全是被误杀的拉丁标题 K-pop。**修复后同请求库内候选 2→10。
+  - **兜底仍保护**:未知艺人走 `songLang`,latin 标题 → english,**即使艺人含中文**——"Sad Sometimes"(黄霄雲 EDM)仍排除出"国语"。`ARTIST_LANG` 只收**确定是韩/日**的艺人,不放中/英艺人,以免污染其它方向。新增韩/日艺人往该表加(key 用 `norm()` 形式)。
 - **会话延续**:`currentDirection` 存在 index.js,4 分支判定——①新方向覆盖;②明确"随便/都行/放开"清空(`isOpenReset`);③纠正/追问("怎么又是X""第一首不是说放Y吗")与续批("下一批/继续")沿用上轮方向(`carriesDirection`);④其余全新请求清空(防方向卡死在旧请求上)。
 - **取数**:RAG 用方向词检索(而非空查询"下一批");库内从**全量收藏按方向随机采样**(每次不同 → 缓解"老推同几首");recommend / explore 池都按方向过滤;explore 种子取方向内收藏曲(→ simi 近邻 + 同艺人深挖天然在方向内)。
 - **宁短勿偏**(2026-06,取代早期"比例让位"):跑偏方向的歌优先换成方向内候选(新→库内),候选枯竭则**直接丢弃**——queue 可以短,**绝不用跨方向歌凑满,绝不谎报语种**。方向 turn 不再硬对齐 familiar/new 比例(保留模型选曲与顺序,让"第一首放 X"生效),档位目标仅作 prompt 软引导。
-- **server 只保证语种**(脚本启发式);**性别 / 风格交给 LLM**(歌名/艺人名无法可靠判定性别)。一首中文男声可能溜进"女声"请求——可接受,急性的英文乱入已根治。
+- **server 只保证语种**(艺人语种表 + 脚本兜底);**性别 / 风格交给 LLM**(歌名/艺人名无法可靠判定性别)。一首韩语男声(태양 / CNBLUE / BIGBANG)可能进到"女声"候选池里、由 LLM 终筛掉——可接受,跨语种乱入已根治。
 - 详见 memory: `project_direction_hard_constraint.md`。
 
 ### 3.3 三个候选池 + agency 层
@@ -264,7 +266,7 @@ WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `
 server/
   index.js              Express + ws 主入口;/api/* 路由;会话态(queue/now/direction/tuning)
   context-builder.js    buildChatMessages:RAG + 档位 + 方向 + 池子 + 降权 → {system, messages, meta}
-  direction.js          方向检测/匹配/延续(detectDirection, songLang, songMatchesDirection, isContinuation)
+  direction.js          方向检测/匹配/延续(detectDirection, songLang, trackLang, songMatchesDirection, isContinuation)
   exploration-modes.js  5 档命名模式表 + modeForValue + familiarTarget
   align-batch.js        repairFamiliarNew:方向感知 + familiar/new 硬对齐(确定性换槽)
   explore-pool.js       buildExplorePool:simi 近邻 + 同艺人深挖(agency 层)
