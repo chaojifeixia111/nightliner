@@ -10,13 +10,15 @@ import { repairFamiliarNew } from './align-batch.js';
 import { detectDirection, carriesDirection, isOpenReset, describeDirection } from './direction.js';
 import { callLlm, extractJson, callLlmStream } from './llm-adapter.js';
 import { resolvePlayList, resolveById } from './playback-coordinator.js';
-import { recordFeedback, recordPlay, recordQueue, recordChatTurn, recentChatTurns, antiList, activeCooldowns, feedbackStats } from './state-db.js';
+import { recordFeedback, recordPlay, recordQueue, recordChatTurn, recentChatTurns, recentPlays, antiList, activeCooldowns, feedbackStats } from './state-db.js';
 import { recommendSongs, personalFm, cloudsearch, searchArtists, artistTopSongs } from './ncm-client.js';
 import { warmup } from './embedder.js';
 import { indexAllSongs, indexAllFeedback, indexAllChatTurns, indexMdFile } from './indexer.js';
 import { checkReasonHallucination } from './budget-enforcer.js';
 import { normalizeSearchSongs, normalizeSearchArtists, normalizeArtistSongs } from './search-normalize.js';
 import { playNow, enqueue, clearUpcoming, removeFromQueue, sameSong } from './queue-ops.js';
+import { buildPlaylist, plKey } from './playlist-builder.js';
+import { buildExplorePool } from './explore-pool.js';
 
 const config = yaml.parse(await fs.readFile('config.yaml', 'utf8'));
 const PORT = process.env.PORT || config.server.port; // PORT 环境变量可覆盖(开发/preview 用)
@@ -101,6 +103,26 @@ async function getRecommendPool() {
     console.warn('[recommend] pool fetch failed:', e.message);
   }
   return recommendCache.songs;
+}
+
+// Library pool for Listen 歌单:收藏快照里带 ncm_id 的歌(按 id 去重),缓存一次。
+let _libraryPool = null;
+async function getLibraryPool() {
+  if (_libraryPool) return _libraryPool;
+  try {
+    const raw = JSON.parse(await fs.readFile('data/netease-snapshot.json', 'utf8'));
+    const byId = new Map();
+    for (const pl of Object.values(raw.playlists)) {
+      for (const song of pl.songs) {
+        if (song.id == null || byId.has(song.id)) continue;
+        byId.set(song.id, { ncm_id: song.id, name: song.name, artist: song.artists });
+      }
+    }
+    _libraryPool = [...byId.values()];
+  } catch {
+    _libraryPool = [];
+  }
+  return _libraryPool;
 }
 
 // Netease snapshot cache for hit-rate stats
@@ -570,6 +592,54 @@ app.post('/api/play', async (req, res) => {
     res.json({ ok: true, song: resolved });
   } catch (e) {
     console.error('[play] error:', e);
+    res.status(500).json({ ok: false, reason: 'error' });
+  }
+});
+
+// POST /api/listen — 「点即播」歌单 { level, n? }
+// daily = 每日推荐池 daily 切片;5 档 = buildPlaylist 按配方从三池确定性随机抽样。
+// 生成 → resolveById 并行解析(按 ncm_id 直取)→ 整批替换 queue 并从首歌开播。
+// 排除 anti-list(永久禁播)+ 最近播放;不动全局调音台档位。
+const LEVEL_VALUE = { comfort: 0, cozy: 25, balanced: 50, venture: 75, wild: 100 };
+app.post('/api/listen', async (req, res) => {
+  const level = String(req.body.level || '').toLowerCase();
+  const n = Math.min(Number(req.body.n) || 25, 40);
+  try {
+    let songs;
+    if (level === 'daily') {
+      const pool = await getRecommendPool();
+      const daily = pool.filter(s => s.src === 'daily');
+      songs = [...(daily.length ? daily : pool)].sort(() => Math.random() - 0.5).slice(0, n);
+    } else if (level in LEVEL_VALUE) {
+      const [library, recommend] = await Promise.all([getLibraryPool(), getRecommendPool()]);
+      const seeds = [...library].sort(() => Math.random() - 0.5).slice(0, 5)
+        .map(s => ({ ncm_id: s.ncm_id, name: s.name, artist: s.artist }));
+      const wildcard = await buildExplorePool({ seeds, perSeedCap: 3, limit: 40 }).catch(() => []);
+      const excludeKeys = new Set();
+      for (const a of antiList()) excludeKeys.add(plKey({ name: a.song_title, artist: a.song_artist }));
+      for (const p of recentPlays(20)) excludeKeys.add(plKey({ name: p.title, artist: p.artist }));
+      songs = buildPlaylist({ value: LEVEL_VALUE[level], n, pools: { library, recommend, wildcard }, excludeKeys });
+    } else {
+      return res.status(400).json({ ok: false, reason: 'bad_level' });
+    }
+
+    if (!songs.length) return res.json({ ok: false, reason: 'empty' });
+
+    const resolved = await Promise.all(
+      songs.map(s => resolveById({ ncm_id: s.ncm_id, title: s.name, artist: s.artist }))
+    );
+    const playable = resolved.filter(s => s.found);
+    if (!playable.length) return res.json({ ok: false, reason: 'unplayable' });
+
+    currentQueue = playable;
+    now = playable[0];
+    recordQueue({ mode: `listen:${level}`, songs: currentQueue });
+    broadcast({ type: 'queue', data: currentQueue });
+    broadcast({ type: 'now', data: now });
+    console.log(`[listen] ${level} → ${playable.length}/${songs.length} playable`);
+    res.json({ ok: true, level, count: playable.length });
+  } catch (e) {
+    console.error('[listen] error:', e);
     res.status(500).json({ ok: false, reason: 'error' });
   }
 });
