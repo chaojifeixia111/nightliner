@@ -19,6 +19,14 @@ if (Test-Port 8080) {
   Start-Process powershell -WorkingDirectory $root -ArgumentList '-NoExit','-Command','npm start'
 }
 
+if (Test-Port 5173) {
+  Write-Host "5173 Vite 前端:已在跑,跳过"
+} else {
+  Write-Host "5173 Vite 前端:启动中..."
+  Start-Process powershell -WorkingDirectory $root -ArgumentList '-NoExit','-Command','npm --prefix pwa run dev'
+}
+
 Write-Host ""
-Write-Host "听歌入口: http://127.0.0.1:8080  (开发热更新另起: npm --prefix pwa run dev → :5173)"
+Write-Host "听歌入口(生产): http://127.0.0.1:8080"
+Write-Host "开发热更新     : http://127.0.0.1:5173  (改前端代码即时刷新,代理 /api 到 8080)"
 Start-Sleep -Seconds 3
