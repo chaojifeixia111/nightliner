@@ -215,6 +215,7 @@ GET  /api/recommend          今日每日推荐(推荐池 daily 切片,带 ncm_i
 GET  /api/search             ?q=&type=song|artist —— 歌曲(cloudsearch type=1)/ 歌手(type=100)
 GET  /api/artist/songs       ?id= —— 歌手热门曲(/artist/top/song)
 POST /api/play               手动点播 {title, artist, ncm_id?, mode:'now'|'queue'}
+POST /api/listen             点即播歌单 {level: daily|comfort|cozy|balanced|venture|wild} → 生成整批替换 queue 并从首歌开播
 GET  /api/state/anti         anti-list
 GET  /api/state/cooldown     active cooldowns
 GET  /api/state/history      最近 10 轮 chat_turns
@@ -224,7 +225,9 @@ WS   (同端口)                广播
 
 WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `dj_stream_delta` / `dj_stream_end` / `dj_message` / `stats`。
 
-**手动点播语义**(DAILY / SEARCH 整版页 → `POST /api/play`):`mode:'now'` 把歌插到当前 now 之后并切过去——DJ 队列原样保留,这首播完顺着原队列走;`mode:'queue'` 追加队尾、不动 now(now 为空则直接开播)。队列变更是纯函数(`queue-ops.js`),`recordQueue({mode:'manual'})` 记档。**不校验 anti/cooldown**——用户明确点名就尊重,这些约束只作用于 DJ 出歌的 prompt。play-event 仍由前端 `<audio>` 照常上报,口味学习不断档。
+**手动点播语义**(SEARCH 整版页结果 → `POST /api/play`):`mode:'now'` 把歌插到当前 now 之后并切过去——DJ 队列原样保留,这首播完顺着原队列走;`mode:'queue'` 追加队尾、不动 now(now 为空则直接开播)。队列变更是纯函数(`queue-ops.js`),`recordQueue({mode:'manual'})` 记档。**不校验 anti/cooldown**——用户明确点名就尊重,这些约束只作用于 DJ 出歌的 prompt。play-event 仍由前端 `<audio>` 照常上报,口味学习不断档。
+
+**Listen 歌单语义**(Listen 页 → `POST /api/listen`):`daily` = 每日推荐池 daily 切片随机取 N;5 档(comfort/cozy/balanced/venture/wild)= `playlist-builder.buildPlaylist` 按档位 `lib/rec/wild` 配方,从「收藏快照 / recommend / explore-pool」三池**确定性随机抽样**(不调 LLM,秒级),去重 + 排除 anti-list/最近播放 + 不足回填到 N;`resolveById` 并行解析后**整批替换 queue、从首歌开播**。点歌单**不改全局调音台 `exploration_pct`**(一次性「来一发这个能量级」)。排除 anti-list,但与手动点播一致**不校验 cooldown**。
 
 ---
 
@@ -233,14 +236,16 @@ WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `
 | 组件 | 职责 |
 |---|---|
 | `App.vue` | WS 连接 + 状态根 + 事件分发(onFeedback/onSkip/…) |
-| `HeroCard.vue` | 封面 / 歌名 / 进度 / `<audio>` 控制 / **音量持久化(localStorage `nl_volume`,默认 33)** / ❤ 常驻 + hover 出 × 反馈面板 |
+| `HeroCard.vue` | 封面 / 歌名 / 进度 / `<audio>` 控制 / **音量持久化(localStorage `nl_volume`,默认 33)** / ❤ 常驻 + hover 出 × 反馈面板 / **队列入口(list 图标 → QueueDrawer)** |
 | `TuningDrawer.vue` | **调音台**:探索档位(5 档吸附滑块,显示英文名)/ Queue 长度 |
 | `QueueDrawer.vue` | queue 预览 + CLEAR 清空待播(只在有待播歌时显示);每行 hover 出 × 单独移除待播歌,正在播的那首不可删 |
-| `ChatInput.vue` | 底部常驻输入 |
+| `ChatInput.vue` | 底部常驻输入 + **搜索入口(左侧放大镜 → 打开搜索整页)** |
 | `DJLog.vue` | DJ 流式气泡(逐字)+ 系统消息 |
-| `AppHeader.vue` | masthead:wordmark + ON AIR + 文字导航 DAILY / SEARCH / QUEUE / TUNING(窄屏 ON AIR 退化为呼吸金点) |
-| `DiscoverPage.vue` | **整版页,两个 variant**:DAILY = 今日推荐封面卡网格(无搜索栏);SEARCH = 纯搜索(SONGS/ARTISTS 切换,歌手下钻热门曲,空态只留提示);点卡/行即播、⊕ 排队;Esc/✕ 关闭 |
-| `SongCard.vue` / `SongRow.vue` / `ArtistRow.vue` | 封面卡 / 结果行 / 歌手行(playing 金色高亮) |
+| `AppHeader.vue` | masthead:wordmark + ON AIR(播放时)+ **▦ Listen 入口** + **TUNING**(2026-06:搜索移入输入栏、队列移入播放栏,刊头只剩这两个;窄屏 ON AIR 退化为呼吸金点) |
+| `ListenPage.vue` | **Listen 整页**:6 张「点即播」封面卡(Today's Picks + Comfort/Cozy/Balanced/Venture/Wild)→ `POST /api/listen` 生成开播;探索度封面 = 金色刻度母题,每日推荐 = 当天封面拼贴;Esc/✕ 关闭 |
+| `PlaylistCard.vue` | Listen 封面卡(`kind=daily` 拼贴 / `kind=level` 刻度母题 + 播放钮) |
+| `DiscoverPage.vue` | **搜索整页**(输入栏放大镜打开,`variant=search`):SONGS/ARTISTS 切换,歌手下钻热门曲;点行即播、⊕ 排队;Esc/✕ 关闭。(`variant=daily` 为 legacy,仅 `/daily` 命令可达,已被 ListenPage 取代) |
+| `SongCard.vue` / `SongRow.vue` / `ArtistRow.vue` | 搜索/每日封面卡 / 结果行 / 歌手行(playing 金色高亮) |
 | `ThinkingIndicator` | 思考中 |
 | `ws-client.js` | WS 封装(断线自动重连)+ `sendFeedback` / `playSong` 等 fetch helper |
 
@@ -280,6 +285,7 @@ server/
   llm-logger.js         llm-calls.jsonl 落盘
   playback-coordinator.js  resolvePlayList(cloudsearch → pickBest 原唱 → songUrl)+ resolveById(手动点播按 id 直取)
   search-normalize.js   NCM 返回 → 前端统一形状(song/artist)纯函数
+  playlist-builder.js   buildPlaylist:按档位配方从三池确定性随机抽样(Listen 点即播歌单)纯函数
   queue-ops.js          playNow/enqueue/clearUpcoming/removeFromQueue:currentQueue/now 纯变更(手动点播/清空/移除用)
   budget-enforcer.js    checkReasonHallucination(仍用);enforceSourcePoolBudget(legacy,已不在 chat 流程)
 
