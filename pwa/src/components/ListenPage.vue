@@ -22,55 +22,36 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, watch, onUnmounted } from 'vue';
 import Icon from './Icon.vue';
 import PlaylistCard from './PlaylistCard.vue';
 
 const props = defineProps({ open: Boolean });
 const emit = defineEmits(['close']);
 
-const dailyCovers = ref([]);
-const dailyCount = ref(0);
 const toast = ref('');
 let toastTimer = null;
 
 const LEVELS = [
-  { level: 'comfort',  value: 0,   kind: 'level', name: 'Comfort',  title: 'Comfort · 舒适区',  subtitle: 'Only your most-played' },
-  { level: 'cozy',     value: 25,  kind: 'level', name: 'Cozy',     title: 'Cozy · 偏熟悉',     subtitle: 'Favorites, a little new' },
-  { level: 'balanced', value: 50,  kind: 'level', name: 'Balanced', title: 'Balanced · 平衡',   subtitle: 'Half familiar, half new' },
-  { level: 'venture',  value: 75,  kind: 'level', name: 'Venture',  title: 'Venture · 偏探索',  subtitle: 'Mostly new, still you' },
-  { level: 'wild',     value: 100, kind: 'level', name: 'Wild',     title: 'Wild · 狂野',       subtitle: 'Almost all new' },
+  { level: 'comfort',  value: 0,   kind: 'level', title: 'Comfort' },
+  { level: 'cozy',     value: 25,  kind: 'level', title: 'Cozy' },
+  { level: 'balanced', value: 50,  kind: 'level', title: 'Balanced' },
+  { level: 'venture',  value: 75,  kind: 'level', title: 'Venture' },
+  { level: 'wild',     value: 100, kind: 'level', title: 'Wild' },
 ];
 
-const cards = computed(() => [
-  {
-    level: 'daily', kind: 'daily', name: "Today's Picks", title: "Today's Picks",
-    subtitle: dailyCount.value ? `${dailyCount.value} tracks · NetEase daily` : 'NetEase daily',
-    covers: dailyCovers.value,
-  },
+const cards = [
+  { level: 'daily', kind: 'daily', title: "Today's Picks" },
   ...LEVELS,
-]);
+];
 
 watch(() => props.open, (isOpen) => {
-  if (isOpen) {
-    window.addEventListener('keydown', onKey);
-    if (!dailyCovers.value.length) loadDailyCovers();
-  } else {
-    window.removeEventListener('keydown', onKey);
-  }
+  if (isOpen) window.addEventListener('keydown', onKey);
+  else window.removeEventListener('keydown', onKey);
 });
 onUnmounted(() => { window.removeEventListener('keydown', onKey); clearTimeout(toastTimer); });
 
 function onKey(e) { if (e.key === 'Escape') emit('close'); }
-
-async function loadDailyCovers() {
-  try {
-    const r = await fetch('/api/recommend').then(r => r.json());
-    const songs = r.songs || [];
-    dailyCount.value = songs.length;
-    dailyCovers.value = songs.map(s => s.pic_url).filter(Boolean).slice(0, 4);
-  } catch { /* 封面拿不到就用占位 */ }
-}
 
 function flashToast(msg) {
   toast.value = msg;
@@ -79,14 +60,14 @@ function flashToast(msg) {
 }
 
 async function onPlay(card) {
-  flashToast(`Starting ${card.name}…`);
+  flashToast(`Starting ${card.title}…`);
   try {
     const r = await fetch('/api/listen', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ level: card.level }),
     }).then(r => r.json());
     if (!r.ok) flashToast("Couldn't build that playlist — try again.");
-    else flashToast(`Playing ${card.name} · ${r.count} tracks`);
+    else flashToast(`Playing ${card.title} · ${r.count} tracks`);
   } catch {
     flashToast("Couldn't reach the server — try again.");
   }
