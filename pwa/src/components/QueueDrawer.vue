@@ -24,6 +24,13 @@
               <span class="idx">{{ String(idx + 1).padStart(2, '0') }}</span>
               <span class="song-name">{{ song.title }}</span>
               <span class="song-artist">{{ song.ncm_artist || song.artist }}</span>
+              <button
+                v-if="!isNow(song)"
+                class="row-del"
+                @click.stop="removeSong(song)"
+                title="Remove from queue"
+                aria-label="Remove"
+              ><Icon name="x" :size="12" /></button>
             </div>
           </div>
         </div>
@@ -51,6 +58,14 @@ const clearable = computed(() => (props.queue || []).some(s => !isNow(s)));
 
 function clearQueue() {
   fetch('/api/queue/clear', { method: 'POST' });
+}
+
+function removeSong(song) {
+  fetch('/api/queue/remove', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ncm_id: song.ncm_id, title: song.title, artist: song.artist }),
+  });
 }
 
 function skipTo(song) {
@@ -120,6 +135,14 @@ function skipTo(song) {
 .song-name { font-family: var(--font-serif); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .song-artist { font-family: var(--font-sans); font-size: 11px; color: var(--paper-4); text-align: right; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
 .queue-row.current .song-artist { color: var(--gold); }
+.row-del {
+  background: none; border: none; cursor: pointer;
+  color: var(--paper-4); padding: 2px; margin: -2px -2px -2px 0;
+  flex-shrink: 0; display: flex; align-items: center;
+  opacity: 0; transition: opacity 0.15s, color 0.18s;
+}
+.queue-row:hover .row-del { opacity: 1; }
+.row-del:hover { color: var(--gold); }
 
 .drawer-enter-active, .drawer-leave-active { transition: transform 0.25s ease; }
 .drawer-enter-from, .drawer-leave-to { transform: translateX(100%); }

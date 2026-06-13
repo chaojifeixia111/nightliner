@@ -16,7 +16,7 @@ import { warmup } from './embedder.js';
 import { indexAllSongs, indexAllFeedback, indexAllChatTurns, indexMdFile } from './indexer.js';
 import { checkReasonHallucination } from './budget-enforcer.js';
 import { normalizeSearchSongs, normalizeSearchArtists, normalizeArtistSongs } from './search-normalize.js';
-import { playNow, enqueue, clearUpcoming } from './queue-ops.js';
+import { playNow, enqueue, clearUpcoming, removeFromQueue, sameSong } from './queue-ops.js';
 
 const config = yaml.parse(await fs.readFile('config.yaml', 'utf8'));
 const PORT = process.env.PORT || config.server.port; // PORT 环境变量可覆盖(开发/preview 用)
@@ -364,6 +364,20 @@ app.get('/api/queue', (req, res) => res.json(currentQueue));
 // POST /api/queue/clear — 清空待播队列(正在播的歌不动)
 app.post('/api/queue/clear', (req, res) => {
   currentQueue = clearUpcoming(currentQueue, now).queue;
+  recordQueue({ mode: 'manual', songs: currentQueue });
+  broadcast({ type: 'queue', data: currentQueue });
+  res.json({ ok: true, queue: currentQueue });
+});
+
+// POST /api/queue/remove — 从待播队列移除指定歌(正在播的不可移除)
+app.post('/api/queue/remove', (req, res) => {
+  const { ncm_id, title, artist } = req.body;
+  if (ncm_id == null && (!title || !artist)) return res.status(400).json({ error: 'ncm_id or title+artist required' });
+  const target = { ncm_id, title, artist };
+  if (now && sameSong(target, now)) return res.status(409).json({ error: 'cannot remove now-playing' });
+  const before = currentQueue.length;
+  currentQueue = removeFromQueue(currentQueue, now, target).queue;
+  if (currentQueue.length === before) return res.status(404).json({ error: 'song not in queue' });
   recordQueue({ mode: 'manual', songs: currentQueue });
   broadcast({ type: 'queue', data: currentQueue });
   res.json({ ok: true, queue: currentQueue });

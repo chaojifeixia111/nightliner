@@ -1,7 +1,7 @@
 // tests/queue-ops.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sameSong, playNow, enqueue, clearUpcoming } from '../server/queue-ops.js';
+import { sameSong, playNow, enqueue, clearUpcoming, removeFromQueue } from '../server/queue-ops.js';
 
 const s = (over) => ({ title: 't', artist: 'a', ncm_id: 1, url: 'u', ...over });
 
@@ -68,5 +68,28 @@ test('clearUpcoming: now 不在队列里也保留为唯一一项', () => {
 test('clearUpcoming: 不修改入参队列(纯函数)', () => {
   const q = [s({ ncm_id: 1 }), s({ ncm_id: 2 })];
   clearUpcoming(q, q[0]);
+  assert.equal(q.length, 2);
+});
+
+test('removeFromQueue: 移除指定的待播歌', () => {
+  const q = [s({ ncm_id: 1 }), s({ ncm_id: 2 }), s({ ncm_id: 3 })];
+  const r = removeFromQueue(q, q[0], s({ ncm_id: 2 }));
+  assert.deepEqual(r.queue.map(x => x.ncm_id), [1, 3]);
+  assert.equal(r.now.ncm_id, 1);
+});
+test('removeFromQueue: 正在播的歌不可移除(保护 now)', () => {
+  const q = [s({ ncm_id: 1 }), s({ ncm_id: 2 })];
+  const r = removeFromQueue(q, q[0], s({ ncm_id: 1 }));
+  assert.deepEqual(r.queue.map(x => x.ncm_id), [1, 2]);
+  assert.equal(r.now.ncm_id, 1);
+});
+test('removeFromQueue: 不在队列里 → 原样返回', () => {
+  const q = [s({ ncm_id: 1 }), s({ ncm_id: 2 })];
+  const r = removeFromQueue(q, q[0], s({ ncm_id: 99 }));
+  assert.deepEqual(r.queue.map(x => x.ncm_id), [1, 2]);
+});
+test('removeFromQueue: 不修改入参队列(纯函数)', () => {
+  const q = [s({ ncm_id: 1 }), s({ ncm_id: 2 })];
+  removeFromQueue(q, q[0], s({ ncm_id: 2 }));
   assert.equal(q.length, 2);
 });

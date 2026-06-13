@@ -24,3 +24,9 @@ export function enqueue(queue, now, song) {
 export function clearUpcoming(queue, now) {
   return { queue: now ? [now] : [], now: now || null };
 }
+
+// 从待播队列移除指定歌。正在播的歌不可移除(保护 now)。
+export function removeFromQueue(queue, now, song) {
+  if (now && sameSong(song, now)) return { queue: [...queue], now };
+  return { queue: queue.filter(x => !sameSong(x, song)), now };
+}
