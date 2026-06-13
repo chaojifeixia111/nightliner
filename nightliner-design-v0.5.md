@@ -242,8 +242,8 @@ WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `
 | `ChatInput.vue` | 底部常驻输入 + **搜索入口(左侧放大镜 → 打开搜索整页)** |
 | `DJLog.vue` | DJ 流式气泡(逐字)+ 系统消息 |
 | `AppHeader.vue` | masthead:wordmark + ON AIR(播放时)+ **▦ Listen 入口** + **TUNING**(2026-06:搜索移入输入栏、队列移入播放栏,刊头只剩这两个;窄屏 ON AIR 退化为呼吸金点) |
-| `ListenPage.vue` | **Listen 整页**:6 张「点即播」封面卡(Today's Picks + Comfort/Cozy/Balanced/Venture/Wild)→ `POST /api/listen` 生成开播;探索度封面 = 金色刻度母题,每日推荐 = 当天封面拼贴;Esc/✕ 关闭 |
-| `PlaylistCard.vue` | Listen 封面卡(`kind=daily` 拼贴 / `kind=level` 刻度母题 + 播放钮) |
+| `ListenPage.vue` | **Listen 整页**:6 张「点即播」卡(Today's Picks + Comfort/Cozy/Balanced/Venture/Wild)→ `POST /api/listen` 生成开播;Esc/✕ 关闭 |
+| `PlaylistCard.vue` | **统一标牌封面**:墨底 + 衬线英文标题 + 金色标记(只英文标题、无描述);`kind=level` = 金色刻度(填充 = 探索度,Comfort→Wild 淡暖递增)/ `kind=daily` = 整宽金线 + 日期 |
 | `DiscoverPage.vue` | **搜索整页**(输入栏放大镜打开,`variant=search`):SONGS/ARTISTS 切换,歌手下钻热门曲;点行即播、⊕ 排队;Esc/✕ 关闭。(`variant=daily` 为 legacy,仅 `/daily` 命令可达,已被 ListenPage 取代) |
 | `SongCard.vue` / `SongRow.vue` / `ArtistRow.vue` | 搜索/每日封面卡 / 结果行 / 歌手行(playing 金色高亮) |
 | `ThinkingIndicator` | 思考中 |
