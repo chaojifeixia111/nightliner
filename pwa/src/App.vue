@@ -3,9 +3,7 @@
     <AppHeader
       :connected="connected" :playing="playing"
       @open-tuning="tuningOpen = true"
-      @open-queue="queueOpen = true"
       @open-listen="listenOpen = true"
-      @open-search="openDiscover('search')"
     />
     <HeroCard
       :state="state"
@@ -14,11 +12,12 @@
       @previous="onPrevious"
       @user-message="pushDjMessage"
       @playing-change="playing = $event"
+      @open-queue="queueOpen = true"
     />
     <div class="djlog-wrap">
       <DJLog :messages="djMessages" :thinking="thinking" :stats="lastStats" :streaming-id="streamingId" />
     </div>
-    <ChatInput :busy="thinking" @send="onChat" @command="onCommand" />
+    <ChatInput :busy="thinking" @send="onChat" @command="onCommand" @open-search="openDiscover('search')" />
     <TuningDrawer
       :open="tuningOpen"
       :tuning="state.tuning"

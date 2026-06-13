@@ -1,5 +1,8 @@
 <template>
   <form class="chat-pill" :class="{ focused, busy }" @submit.prevent="onSubmit">
+    <button type="button" class="search-btn" @click="$emit('open-search')" aria-label="Search">
+      <Icon name="search" :size="15" />
+    </button>
     <input
       ref="inputEl"
       v-model="text"
@@ -24,7 +27,7 @@ const text = ref('');
 const focused = ref(false);
 const placeholder = ref('');
 const inputEl = ref(null);
-const emit = defineEmits(['send', 'command']);
+const emit = defineEmits(['send', 'command', 'open-search']);
 const props = defineProps({ busy: Boolean });
 
 onMounted(() => {
@@ -73,6 +76,20 @@ input {
   min-width: 0;
 }
 input::placeholder { color: var(--paper-4); }
+.search-btn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--paper-4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.18s;
+}
+.search-btn:hover { color: var(--paper-1); }
 .send-btn {
   flex-shrink: 0;
   width: 32px;

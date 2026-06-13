@@ -7,8 +7,6 @@
           <span v-if="playing" class="on-air">ON AIR</span>
         </transition>
         <button class="icon-link" @click="$emit('open-listen')" aria-label="Listen"><Icon name="layout-grid" :size="15" /></button>
-        <button class="nav-link" @click="$emit('open-search')">SEARCH</button>
-        <button class="nav-link" @click="$emit('open-queue')">QUEUE</button>
         <button class="nav-link" @click="$emit('open-tuning')">TUNING</button>
       </div>
     </div>
@@ -22,7 +20,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import Icon from './Icon.vue';
 
 defineProps({ connected: Boolean, playing: Boolean });
-defineEmits(['open-tuning', 'open-queue', 'open-listen', 'open-search']);
+defineEmits(['open-tuning', 'open-listen']);
 
 const DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];

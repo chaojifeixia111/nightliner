@@ -57,6 +57,7 @@
         <button class="ghost-btn fb-love" :class="{ flashed: flashedSignal === 'love' }" title="Love" @click="quickLove">
           <Icon name="heart" :size="16" />
         </button>
+        <button class="ghost-btn" title="Queue" @click="$emit('open-queue')"><Icon name="list" :size="16" /></button>
       </div>
     </div>
 
@@ -102,7 +103,7 @@ import Icon from './Icon.vue';
 import { extractAmbient } from '../utils/ambient.js';
 
 const props = defineProps({ state: Object });
-const emit = defineEmits(['feedback', 'skip', 'previous', 'user-message', 'playing-change']);
+const emit = defineEmits(['feedback', 'skip', 'previous', 'user-message', 'playing-change', 'open-queue']);
 
 onMounted(() => { applyVolume(); });
 onUnmounted(() => { clearTimeout(bufferTimer); });
