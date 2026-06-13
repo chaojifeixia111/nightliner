@@ -6,7 +6,7 @@
         <transition name="fade">
           <span v-if="playing" class="on-air">ON AIR</span>
         </transition>
-        <button class="nav-link" @click="$emit('open-daily')">DAILY</button>
+        <button class="icon-link" @click="$emit('open-listen')" aria-label="Listen"><Icon name="layout-grid" :size="15" /></button>
         <button class="nav-link" @click="$emit('open-search')">SEARCH</button>
         <button class="nav-link" @click="$emit('open-queue')">QUEUE</button>
         <button class="nav-link" @click="$emit('open-tuning')">TUNING</button>
@@ -19,9 +19,10 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
+import Icon from './Icon.vue';
 
 defineProps({ connected: Boolean, playing: Boolean });
-defineEmits(['open-tuning', 'open-queue', 'open-daily', 'open-search']);
+defineEmits(['open-tuning', 'open-queue', 'open-listen', 'open-search']);
 
 const DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -83,6 +84,12 @@ onUnmounted(() => clearInterval(timer));
   transition: color 0.18s;
 }
 .nav-link:hover { color: var(--paper-0); }
+.icon-link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--paper-3); display: flex; align-items: center;
+  transition: color 0.18s;
+}
+.icon-link:hover { color: var(--paper-0); }
 .dateline {
   text-align: center;
   padding: 7px 0;

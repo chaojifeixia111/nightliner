@@ -4,7 +4,7 @@
       :connected="connected" :playing="playing"
       @open-tuning="tuningOpen = true"
       @open-queue="queueOpen = true"
-      @open-daily="openDiscover('daily')"
+      @open-listen="listenOpen = true"
       @open-search="openDiscover('search')"
     />
     <HeroCard
@@ -37,6 +37,7 @@
       :now="state.now"
       @close="discoverOpen = false"
     />
+    <ListenPage :open="listenOpen" @close="listenOpen = false" />
   </div>
 </template>
 
@@ -49,11 +50,13 @@ import ChatInput from './components/ChatInput.vue';
 import TuningDrawer from './components/TuningDrawer.vue';
 import QueueDrawer from './components/QueueDrawer.vue';
 import DiscoverPage from './components/DiscoverPage.vue';
+import ListenPage from './components/ListenPage.vue';
 import { connectWs, sendFeedback } from './ws-client.js';
 
 const connected = ref(false);
 const tuningOpen = ref(false);
 const queueOpen = ref(false);
+const listenOpen = ref(false);
 const discoverOpen = ref(false);
 const discoverVariant = ref('daily');   // 'daily' | 'search'
 
