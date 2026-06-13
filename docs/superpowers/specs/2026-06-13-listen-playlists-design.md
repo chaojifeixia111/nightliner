@@ -2,8 +2,8 @@
 
 **日期**: 2026-06-13
 **作者**: Elliot + Claude
-**状态**: Draft, 实现中
-**关联**: 2026-05-30-recommend-search-frontend-design.md(被本稿部分取代:DAILY/SEARCH 入口重构)
+**状态**: ✅ 已实现并验证(2026-06-13;`playlist-builder` 10 单测 + `/api/listen` 四档实测,前端 6 卡可视核对)
+**关联**: 2026-05-30-recommend-search-frontend-design.md(本稿取代其 DAILY/SEARCH 刊头入口:搜索移入输入栏、每日推荐并入 Listen 页)
 
 ---
 

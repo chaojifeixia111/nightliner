@@ -1,6 +1,6 @@
 # 每日推荐 + 搜索 前端入口 Implementation Plan
 
-> **状态(2026-06-12)**:✅ **已实现并验证**(8 个 task 全部完成,逐 task 提交)。实现期偏差:getRecommendPool 保留了 daily+fm 混池(只增强 pic_url+src 标签,/api/recommend 取 daily 切片);artistTopSongs 已存在无需新增;resolveById 瞬时错误标 reason:error 区别于 unplayable;额外 polish:点击 pending toast、窄屏 masthead 收缩、/daily /search 斜杠命令。
+> **状态(2026-06-12)**:✅ **已实现并验证**(8 个 task 全部完成,逐 task 提交)。实现期偏差:getRecommendPool 保留了 daily+fm 混池(只增强 pic_url+src 标签,/api/recommend 取 daily 切片);artistTopSongs 已存在无需新增;resolveById 瞬时错误标 reason:error 区别于 unplayable;额外 polish:点击 pending toast、窄屏 masthead 收缩、/daily /search 斜杠命令。**后续(2026-06-13)**:本计划落地的 DAILY/SEARCH 刊头入口已被 Listen 页重构取代——搜索移入输入栏、每日推荐并入 Listen 页(详见 `docs/superpowers/specs/2026-06-13-listen-playlists-design.md`)。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

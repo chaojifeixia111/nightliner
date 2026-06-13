@@ -2,7 +2,7 @@
 
 **日期**: 2026-05-30(2026-06-12 改版)
 **作者**: Elliot + Claude
-**状态**: Draft, 待 review;截至 2026-06-12 **未实现**(对应 plan 的 task 均未开始)
+**状态**: ✅ 已实现(2026-06-12,DiscoverPage 搜索/每日整页)。**后续**:其 DAILY/SEARCH 刊头入口已被 2026-06-13 Listen 页方案取代——搜索移入输入栏(放大镜)、每日推荐并入 Listen 页;DiscoverPage 仅保留 `search` variant(`daily` variant 转 legacy,仅 `/daily` 命令可达)
 **改版说明**: 2026-06-12 前端从「双右滑抽屉」改为「夜刊整版页」(配合 night-issue 重设计,见 memory: night-issue design system);后端设计不变
 **关联**: 2026-05-28-rag-local-embedding-design.md
 

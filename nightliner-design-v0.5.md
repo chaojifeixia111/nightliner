@@ -7,7 +7,7 @@
 > - **本 v0.5 = 实际落地现状**,覆盖以上二者;凡有冲突**以代码为准**。
 > **平台**:Windows 11 开发(Node 20+,纯 JS,可无缝迁 Mac)。
 > **风格**:完全私人订制,为 Elliot 一人服务,不通用化。
-> **最后更新**:2026-06-12。
+> **最后更新**:2026-06-13(Listen 页 + 探索度歌单 + 导航重构)。
 
 ---
 
@@ -172,7 +172,7 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
 
 **已知取舍**:部分 VIP 独享 / 仅有翻唱的歌会掉队。这是当前已知、未优先处理的缺口。
 
-**手动点播路径(`resolveById`,DAILY / SEARCH 整版页用)**:前端带确定的 `ncm_id` → 跳过搜索,直接 `song/url/v1` 取直链 + `song/detail` 补封面/时长。无直链(VIP/无版权)→ `reason:'unplayable'`;瞬时网络 / NCM 5xx → `reason:'error'`(前端文案区分"放弃"和"重试")。没带 `ncm_id` 时降级走 `resolvePlayList`。
+**按 id 取直链(`resolveById`,SEARCH 结果点播 / Listen 歌单用)**:前端/引擎带确定的 `ncm_id` → 跳过搜索,直接 `song/url/v1` 取直链 + `song/detail` 补封面/时长。无直链(VIP/无版权)→ `reason:'unplayable'`;瞬时网络 / NCM 5xx → `reason:'error'`(前端文案区分"放弃"和"重试")。没带 `ncm_id` 时降级走 `resolvePlayList`。
 
 ---
 
@@ -247,6 +247,7 @@ WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `
 | `DiscoverPage.vue` | **搜索整页**(输入栏放大镜打开,`variant=search`):SONGS/ARTISTS 切换,歌手下钻热门曲;点行即播、⊕ 排队;Esc/✕ 关闭。(`variant=daily` 为 legacy,仅 `/daily` 命令可达,已被 ListenPage 取代) |
 | `SongCard.vue` / `SongRow.vue` / `ArtistRow.vue` | 搜索/每日封面卡 / 结果行 / 歌手行(playing 金色高亮) |
 | `ThinkingIndicator` | 思考中 |
+| `Icon.vue` | 内联 lucide 线条图标(无运行时依赖);新增图标往 PATHS 加一条即可 |
 | `ws-client.js` | WS 封装(断线自动重连)+ `sendFeedback` / `playSong` 等 fetch helper |
 
 ---
