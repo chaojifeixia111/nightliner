@@ -3,7 +3,7 @@
 // 回归点:英文 EDM(非韩/日艺人)绝不能漏进 korean 方向;短 key("ive")不能子串误命中。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { songMatchesDirection, trackLang } from '../server/direction.js';
+import { songMatchesDirection, trackLang, isAcknowledgment, detectVerbatim } from '../server/direction.js';
 
 const KOR = { langMatch: 'korean', gender: null, artists: [], raw: 'kpop' };
 const KOR_F = { langMatch: 'korean', gender: 'female', artists: [], raw: 'kpop女声' };
@@ -51,4 +51,33 @@ test('known Korean artist in a collab segment is detected', () => {
 test('chinese direction unaffected (Han-title still chinese)', () => {
   assert.equal(songMatchesDirection('寂寞寂寞就好', '田馥甄', CHN), true);
   assert.equal(songMatchesDirection('Talk that Talk', 'TWICE', CHN), false);
+});
+
+// Layer 3: 纯确认词整句 = 闲聊,不该触发重新推荐("好的" 被当 recommend → 重复推 바빠)
+test('isAcknowledgment: 整句只是确认词 → true', () => {
+  for (const m of ['好的', '好', '嗯', '嗯嗯', '行', '可以', 'ok', 'OK', '没问题', '收到', '好的~', '好的。']) {
+    assert.equal(isAcknowledgment(m), true, m);
+  }
+});
+test('isAcknowledgment: 带新请求 / 实质内容 → false', () => {
+  for (const m of ['好的，再来几首慢的', '换一批', '推荐几首晚上的', '好听吗', '好的吗']) {
+    assert.equal(isAcknowledgment(m), false, m);
+  }
+});
+
+// Layer 3: 显式 verbatim —— "直接放每日推荐" / "第一首放 X" 应跳过比例换槽
+test('detectVerbatim: 显式直接/原样放每日推荐 → true', () => {
+  assert.equal(detectVerbatim('直接放每日推荐'), true);
+  assert.equal(detectVerbatim('原样放今天的每日推荐'), true);
+  assert.equal(detectVerbatim('按顺序放每日推荐'), true);
+});
+test('detectVerbatim: 点名第一首 → true', () => {
+  assert.equal(detectVerbatim('第一首放 Shelter'), true);
+  assert.equal(detectVerbatim('第一首要 Long Shot'), true);
+  assert.equal(detectVerbatim('不是让你第一首放 safe with me 吗'), true);
+});
+test('detectVerbatim: 普通推荐 / 默认仍由 agent 策展 → false', () => {
+  assert.equal(detectVerbatim('放一下今天的每日推荐'), false); // 无"直接/原样"线索 → 默认策展
+  assert.equal(detectVerbatim('放点国语女声'), false);
+  assert.equal(detectVerbatim('换一批'), false);
 });

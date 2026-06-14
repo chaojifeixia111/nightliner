@@ -11,7 +11,7 @@ import { songKey } from './explore-pool.js';
 import { songMatchesDirection } from './direction.js';
 
 export function repairFamiliarNew(plays, meta) {
-  const { famTarget, libKeys, librarySlice = [], explorePool = [], recommendPool = [], direction = null } = meta || {};
+  const { famTarget, libKeys, librarySlice = [], explorePool = [], recommendPool = [], direction = null, verbatim = false } = meta || {};
   if (!Array.isArray(plays) || !plays.length || !libKeys || famTarget == null) {
     return { repaired: 0, familiar: 0, before: 0, newCount: plays?.length || 0, offDir: 0 };
   }
@@ -67,8 +67,9 @@ export function repairFamiliarNew(plays, meta) {
   // ── 第二步:familiar↔new 比例硬对齐 —— **仅在「无方向」的开放推荐时执行**。
   // 有方向时:模型的方向内选曲已证明可靠,一律保留,不为凑库内/全新比例换掉它们,
   // 也保留顺序(让「第一首放 X」生效)。此时比例只由 prompt + 候选池软引导。
+  // verbatim(「直接放每日推荐」/「第一首放 X」)同理跳过换槽,保住模型选曲与顺序。
   let familiar = plays.filter(inLib).length;
-  if (!direction) {
+  if (!direction && !verbatim) {
     // 库内太多 → 把多出来的库内歌换成全新候选
     while (familiar > famTarget && newCands.length) {
       const idx = plays.findIndex(inLib);

@@ -281,7 +281,7 @@ function fmtExplorePool(cands) {
 
 export async function buildChatMessages({
   userMessage, currentQueue, n = 5, exploration_pct = 30,
-  recommendPool = [], now = null, direction = null,
+  recommendPool = [], now = null, direction = null, verbatim = false,
 }) {
   const [systemTpl, userTpl, djPersona] = await Promise.all([
     fs.readFile(SYSTEM_PATH, 'utf8'),
@@ -440,6 +440,6 @@ export async function buildChatMessages({
 
   return {
     system, messages,
-    meta: { mode, n, famTarget, newTarget, libKeys, direction, librarySlice, explorePool, recommendPool: dirRecommend },
+    meta: { mode, n, famTarget, newTarget, libKeys, direction, verbatim, librarySlice, explorePool, recommendPool: dirRecommend },
   };
 }

@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { buildChatMessages, libraryArtistNames } from './context-builder.js';
 import { repairFamiliarNew } from './align-batch.js';
-import { detectDirection, carriesDirection, isOpenReset, describeDirection } from './direction.js';
+import { detectDirection, carriesDirection, isOpenReset, describeDirection, detectVerbatim, isAcknowledgment } from './direction.js';
 import { callLlm, extractJson, callLlmStream } from './llm-adapter.js';
 import { resolvePlayList, resolveById } from './playback-coordinator.js';
 import { recordFeedback, recordPlay, recordQueue, recordChatTurn, recentChatTurns, recentPlays, antiList, activeCooldowns, feedbackStats } from './state-db.js';
@@ -211,6 +211,9 @@ app.post('/api/chat', async (req, res) => {
     }
     if (currentDirection) console.log(`[chat] 方向=${describeDirection(currentDirection)}${detected ? '' : ' (沿用上轮)'}`);
 
+    const verbatim = detectVerbatim(message); // 「直接放每日推荐」/「第一首放 X」→ 跳过比例换槽
+    if (verbatim) console.log('[chat] verbatim 指令 → 跳过 familiar/new 换槽,保住模型选曲与顺序');
+
     const recommendPoolP = getRecommendPool(); // 与 RAG 检索并行,buildChatMessages 内部 await
     const { system, messages, meta } = await buildChatMessages({
       userMessage: message,
@@ -220,6 +223,7 @@ app.post('/api/chat', async (req, res) => {
       recommendPool: recommendPoolP,
       now,
       direction: currentDirection,
+      verbatim,
     });
 
     const { say: parsedSay, parsed, status } = await callLlmStream({
@@ -229,6 +233,12 @@ app.post('/api/chat', async (req, res) => {
     // status=failed → 容错修复 + json_object 重问都没救回来。别再静默当 chat 丢弃(那会污染
     // chat_turns 记忆,让下一轮以为"用户只是闲聊"),如实标记 parse_error。
     let intent = status === 'failed' ? 'parse_error' : (parsed.intent || 'recommend');
+    // Layer 3:整句只是确认词("好的"/"嗯")→ 强制当 chat,绝不因 default-recommend 或模型手滑
+    // 而重新推荐(历史 bug:"好的" 被当 recommend、把方向内仅有的 바빠 又推一遍)。
+    if (intent !== 'parse_error' && isAcknowledgment(message)) {
+      if (intent === 'recommend') console.log('[chat] 纯确认词 → 覆盖 intent=chat,不重新推荐');
+      intent = 'chat';
+    }
     // say 优先用流式累积的;模型若把话塞进 JSON(旧习惯)或直接吐 JSON 则回退
     const say = (streamedSay.trim() || parsedSay || parsed.say || '').trim();
     // 模型没流式 prose(直接 JSON)但有 say → 补发一气泡

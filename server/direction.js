@@ -97,6 +97,26 @@ export function isOpenReset(message) {
   return OPEN_RESET.test(message || '');
 }
 
+// 整句只是确认词(无新请求)→ 当 chat,别重新推荐。
+// 锚定首尾:只命中「整条消息就是一个确认词」,所以"好的,再来几首慢的"不会命中(它带新请求)。
+const ACK_ONLY = /^(好的?|嗯+|行|可以|ok(ay)?|没问题|没事|收到|知道了?|懂了?|谢谢?|谢啦|thx|thanks|👍+)[\s~!！。.，,]*$/i;
+export function isAcknowledgment(message) {
+  return ACK_ONLY.test((message || '').trim());
+}
+
+// 显式 verbatim 指令:用户要「就这么放」而不是让 agent 再策展/换槽。
+//  - 「直接/原样/按顺序…放每日推荐」:跳过熟悉↔全新比例换槽(仍服从方向硬约束)。
+//  - 「第一首放/要/是 X」:固定头部,跳过换槽以保住顺序(模型已把 X 放第一)。
+// 默认不命中 —— 普通「放点每日推荐」仍走 agent 策展(Agency 原则)。
+const VERBATIM_CUE = /(直接|原样|按顺序|按原顺序|原封|完整|别筛|别动|照着|照原)/;
+const PIN_FIRST = /第一首\s*(放|要|是|来|播|给|用|先|得|换成)/;
+export function detectVerbatim(message) {
+  const m = message || '';
+  if (PIN_FIRST.test(m)) return true;
+  if (/每日推荐/.test(m) && VERBATIM_CUE.test(m)) return true;
+  return false;
+}
+
 /**
  * 从用户消息检测「方向」。检测不到(纯开放式/纯风格情绪)返回 null。
  * @param {string} message

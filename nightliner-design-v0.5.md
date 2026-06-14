@@ -71,7 +71,8 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   │
   5. repairFamiliarNew(align-batch.js)— 确定性对齐,不重试(零延迟)
   │    跨方向的歌换成方向内候选(新→库内),换不到就丢弃(宁短勿偏,queue 可短);
-  │    familiar/new 硬对齐仅在无方向时执行(方向 turn 保留模型选曲与顺序)
+  │    familiar/new 硬对齐仅在**无方向且非 verbatim** 时执行
+  │    (方向 turn / 「直接放每日推荐」/「第一首放 X」都保留模型选曲与顺序)
   │
   6. checkReasonHallucination(budget-enforcer.js)— 启发式,命中 evidence 外细节则遮蔽 reason
   │
@@ -109,6 +110,7 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
 
 - `familiarTarget(mode, n) = round(lib/100 × n)`,其余为「全新」。
 - **硬对齐**:`repairFamiliarNew` 不信模型自报的 `source_pool`,用真实曲库 `libKeys` 判定每首库内/全新,确定性多退少补(从手边候选池换槽,**不重试**)。这取代了 v0.5-early 的 `enforceSourcePoolBudget`+retry。
+- **verbatim 例外**:`detectVerbatim(message)`(「直接/原样/按顺序 放每日推荐」或「第一首放/要/是 X」)置 `meta.verbatim`,跳过比例换槽,保住模型选曲与顺序——显式摆放指令下 Agency 让位于"照办"。仍服从方向硬约束与 anti/cooldown。
 
 ### 3.2 方向硬约束(优先级高于档位)— `server/direction.js`
 
@@ -161,7 +163,8 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   - `prompts/user-turn.md`(每轮变):用户消息 + now-playing + queue + **方向块** + **探索档位 + 本批 familiar/new 目标** + RAG 召回(库内/recommend/explore/反馈/taste/life-stage/mood/vibe/语义历史)+ anti/cooldown/**降权**/RECENT_PLAYS。
   - 多轮 `messages[]`:最近 5 轮 chat_turns 回放成 user/assistant 对(近因)。
 - **prose-then-JSON**:第一步纯文本 = `say`(逐字流式);第二步 ```json``` 块 = `{intent, play[], queueAction, feedback_extract, modeUpdate}`,**不含 say**。
-  - `intent` ∈ `recommend` / `chat` / `feedback`。
+  - **开场白只说氛围/方向,不点具体歌名**:`say` 先于 JSON 流出,而 `repairFamiliarNew` 可能换掉歌——点名就会和真实队列对不上(prompt 约束;每首"为什么"放 per-song `reason`,播放时逐首显示)。
+  - `intent` ∈ `recommend` / `chat` / `feedback`(+ server 端 `parse_error`)。**server 端兜底**:整句确认词("好的"/"嗯")→ 强制 `chat`(`isAcknowledgment`,绝不重新推荐);`status=failed` → `parse_error`(不入队、不污染 chat_turns 记忆)。
   - `play[]` 每首:`title, artist, reason, memoryLink, confidence, source_preference, source_pool`。
   - `feedback_extract`(intent=feedback 时):`{target_title, target_artist, target_category, signal, reason}`。
 - **provider 路由**(`llm-adapter.js`,按 model 名前缀):`claude-*`→ claude CLI 子进程;`deepseek-*`→ DeepSeek HTTP;`qwen-*`→ DashScope HTTP。**流式仅 deepseek/qwen**(SSE);claude 无流式 → 整段拿回再一次性 emit。
