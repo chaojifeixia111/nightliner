@@ -30,3 +30,25 @@ export function removeFromQueue(queue, now, song) {
   if (now && sameSong(song, now)) return { queue: [...queue], now };
   return { queue: queue.filter(x => !sameSong(x, song)), now };
 }
+
+// 把 chat 推荐返回的一批 playable 应用到 queue。返回 { queue, now, changed }。
+// 护栏:playable 为空时**不动 queue**——避免「模型给了 recommend 但解析空/全无版权 →
+// 整列被清空、now=null、播放中断」。queueAction:
+//   rewrite_tail 保留 now、换掉其后;insert_next 插到 now 之后;其它(含缺省)= 整列替换。
+export function applyChatRecommendation(queue, now, playable, queueAction) {
+  if (!Array.isArray(playable) || playable.length === 0) {
+    return { queue: [...queue], now, changed: false };
+  }
+  if (queueAction === 'rewrite_tail' && queue.length) {
+    const idxNow = now ? queue.findIndex(x => sameSong(x, now)) : -1;
+    const head = idxNow >= 0 ? [queue[idxNow]] : [];
+    return { queue: [...head, ...playable], now: now || playable[0], changed: true };
+  }
+  if (queueAction === 'insert_next') {
+    const idxNow = now ? queue.findIndex(x => sameSong(x, now)) : -1;
+    const next = [...queue];
+    next.splice(idxNow + 1, 0, ...playable);
+    return { queue: next, now: now || playable[0], changed: true };
+  }
+  return { queue: [...playable], now: playable[0], changed: true };
+}

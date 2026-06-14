@@ -1,7 +1,7 @@
 // tests/queue-ops.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sameSong, playNow, enqueue, clearUpcoming, removeFromQueue } from '../server/queue-ops.js';
+import { sameSong, playNow, enqueue, clearUpcoming, removeFromQueue, applyChatRecommendation } from '../server/queue-ops.js';
 
 const s = (over) => ({ title: 't', artist: 'a', ncm_id: 1, url: 'u', ...over });
 
@@ -92,4 +92,42 @@ test('removeFromQueue: 不修改入参队列(纯函数)', () => {
   const q = [s({ ncm_id: 1 }), s({ ncm_id: 2 })];
   removeFromQueue(q, q[0], s({ ncm_id: 2 }));
   assert.equal(q.length, 2);
+});
+
+// applyChatRecommendation — 把一批 playable 应用到 queue,内含「空 playable 不清空」护栏。
+test('applyChatRecommendation: 空 playable → 队列不动(防止解析空清空播放)', () => {
+  const q = [s({ ncm_id: 1 }), s({ ncm_id: 2 })];
+  const r = applyChatRecommendation(q, q[0], [], 'replace_all');
+  assert.equal(r.changed, false);
+  assert.deepEqual(r.queue.map(x => x.ncm_id), [1, 2]);
+  assert.equal(r.now.ncm_id, 1);
+});
+test('applyChatRecommendation: replace_all → 整列替换, now=第一首', () => {
+  const q = [s({ ncm_id: 1 })];
+  const r = applyChatRecommendation(q, q[0], [s({ ncm_id: 7 }), s({ ncm_id: 8 })], 'replace_all');
+  assert.equal(r.changed, true);
+  assert.deepEqual(r.queue.map(x => x.ncm_id), [7, 8]);
+  assert.equal(r.now.ncm_id, 7);
+});
+test('applyChatRecommendation: 缺省 queueAction 视为整列替换', () => {
+  const r = applyChatRecommendation([s({ ncm_id: 1 })], s({ ncm_id: 1 }), [s({ ncm_id: 9 })], undefined);
+  assert.deepEqual(r.queue.map(x => x.ncm_id), [9]);
+  assert.equal(r.now.ncm_id, 9);
+});
+test('applyChatRecommendation: rewrite_tail → 保留 now, 换掉其后', () => {
+  const q = [s({ ncm_id: 1 }), s({ ncm_id: 2 }), s({ ncm_id: 3 })];
+  const r = applyChatRecommendation(q, q[1], [s({ ncm_id: 8 })], 'rewrite_tail');
+  assert.deepEqual(r.queue.map(x => x.ncm_id), [2, 8]);
+  assert.equal(r.now.ncm_id, 2);
+});
+test('applyChatRecommendation: insert_next → 插到 now 之后, now 不变', () => {
+  const q = [s({ ncm_id: 1 }), s({ ncm_id: 2 })];
+  const r = applyChatRecommendation(q, q[0], [s({ ncm_id: 8 }), s({ ncm_id: 9 })], 'insert_next');
+  assert.deepEqual(r.queue.map(x => x.ncm_id), [1, 8, 9, 2]);
+  assert.equal(r.now.ncm_id, 1);
+});
+test('applyChatRecommendation: 不修改入参队列(纯函数)', () => {
+  const q = [s({ ncm_id: 1 })];
+  applyChatRecommendation(q, q[0], [s({ ncm_id: 2 })], 'insert_next');
+  assert.equal(q.length, 1);
 });

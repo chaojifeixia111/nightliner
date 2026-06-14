@@ -16,7 +16,7 @@ import { warmup } from './embedder.js';
 import { indexAllSongs, indexAllFeedback, indexAllChatTurns, indexMdFile } from './indexer.js';
 import { checkReasonHallucination } from './budget-enforcer.js';
 import { normalizeSearchSongs, normalizeSearchArtists, normalizeArtistSongs } from './search-normalize.js';
-import { playNow, enqueue, clearUpcoming, removeFromQueue, sameSong } from './queue-ops.js';
+import { playNow, enqueue, clearUpcoming, removeFromQueue, sameSong, applyChatRecommendation } from './queue-ops.js';
 import { buildPlaylist, plKey } from './playlist-builder.js';
 import { buildExplorePool } from './explore-pool.js';
 
@@ -222,11 +222,13 @@ app.post('/api/chat', async (req, res) => {
       direction: currentDirection,
     });
 
-    const { say: parsedSay, parsed } = await callLlmStream({
+    const { say: parsedSay, parsed, status } = await callLlmStream({
       system, messages, model: config.models.chat_mode, trigger: 'chat', onSayDelta,
     });
 
-    const intent = parsed.intent || 'recommend';
+    // status=failed → 容错修复 + json_object 重问都没救回来。别再静默当 chat 丢弃(那会污染
+    // chat_turns 记忆,让下一轮以为"用户只是闲聊"),如实标记 parse_error。
+    let intent = status === 'failed' ? 'parse_error' : (parsed.intent || 'recommend');
     // say 优先用流式累积的;模型若把话塞进 JSON(旧习惯)或直接吐 JSON 则回退
     const say = (streamedSay.trim() || parsedSay || parsed.say || '').trim();
     // 模型没流式 prose(直接 JSON)但有 say → 补发一气泡
@@ -243,7 +245,13 @@ app.post('/api/chat', async (req, res) => {
     let recordedPlayTitles = [];
     let recordedFeedback = null;
 
-    if (intent === 'recommend') {
+    if (intent === 'parse_error') {
+      // 修复 + 重问都失败:不执行任何队列动作,如实告诉用户而不是装作聊了天
+      broadcast({ type: 'dj_message', data: { ts, kind: 'system',
+        text: '抱歉,刚没接住你的意思(回复没解析成功)——再说一次?' } });
+      console.warn('[chat] parse_error: JSON 修复+json_object 重问均失败,本轮未执行');
+
+    } else if (intent === 'recommend') {
       // Resolve play list → NCM URLs
       const plays = Array.isArray(parsed.play) ? parsed.play : [];
 
@@ -283,30 +291,29 @@ app.post('/api/chat', async (req, res) => {
       }
       console.log(`[chat] queueAction=${parsed.queueAction}, library_hits=${library_hits}/${plays.length}`);
 
-      if (parsed.queueAction === 'rewrite_tail' && currentQueue.length) {
-        const idxNow = now ? currentQueue.findIndex(s => s.title === now.title) : -1;
-        const head = idxNow >= 0 ? [currentQueue[idxNow]] : [];
-        currentQueue = [...head, ...playable];
-      } else if (parsed.queueAction === 'insert_next') {
-        const idxNow = now ? currentQueue.findIndex(s => s.title === now.title) : -1;
-        currentQueue.splice(idxNow + 1, 0, ...playable);
-      } else {
-        currentQueue = playable;
-        now = playable[0] || null;
-      }
+      const applied = applyChatRecommendation(currentQueue, now, playable, parsed.queueAction);
+      currentQueue = applied.queue;
+      now = applied.now;
 
-      recordQueue({ mode: 'chat', songs: currentQueue });
-      broadcast({ type: 'queue', data: currentQueue });
-      broadcast({ type: 'now', data: now });
+      if (applied.changed) {
+        recordQueue({ mode: 'chat', songs: currentQueue });
+        broadcast({ type: 'queue', data: currentQueue });
+        broadcast({ type: 'now', data: now });
 
-      // DJ opening 已通过 dj_stream_* 流式给到前端,这里不再重复广播
-      // Per-song reasons
-      for (let i = 0; i < playable.length; i++) {
-        const s = playable[i];
-        const reason = s.reason || '';
-        if (reason) {
-          broadcast({ type: 'dj_message', data: { ts, kind: 'song', title: s.title, text: reason } });
+        // DJ opening 已通过 dj_stream_* 流式给到前端,这里不再重复广播
+        // Per-song reasons
+        for (let i = 0; i < playable.length; i++) {
+          const s = playable[i];
+          const reason = s.reason || '';
+          if (reason) {
+            broadcast({ type: 'dj_message', data: { ts, kind: 'song', title: s.title, text: reason } });
+          }
         }
+      } else {
+        // 护栏:playable 为空 → queue 已保住不变,如实告知而不是静默清空播放
+        broadcast({ type: 'dj_message', data: { ts, kind: 'system',
+          text: '这批没找到能播的歌(可能都无版权或解析失败),队列保持不变。' } });
+        console.warn(`[chat] recommend 解析出 ${plays.length} 首但 0 首可播,队列未改动`);
       }
 
       // Stats broadcast

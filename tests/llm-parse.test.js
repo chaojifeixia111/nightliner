@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
-import { splitSayAndJson, repairLooseJson } from '../server/llm-adapter.js';
+import { splitSayAndJson, repairLooseJson, reaskJsonObject } from '../server/llm-adapter.js';
 
 const realBroken = fs.readFileSync(new URL('./fixtures/broken-json-01.txt', import.meta.url), 'utf8');
 
@@ -55,4 +55,30 @@ test('unrepairable fenced garbage reports status failed', () => {
   const text = 'hi\n```json\n{"play": ][ "nope" : : }\n```';
   const { status } = splitSayAndJson(text);
   assert.equal(status, 'failed');
+});
+
+test('reaskJsonObject re-asks in json_object mode and parses the reply', async () => {
+  let seen;
+  const fakeCall = async (args) => {
+    seen = args;
+    return '{"intent":"recommend","play":[{"title":"X","artist":"Y"}]}';
+  };
+  const parsed = await reaskJsonObject(
+    { system: 'sys', messages: [{ role: 'user', content: '放点歌' }], model: 'deepseek-x' },
+    fakeCall,
+  );
+  assert.equal(parsed.intent, 'recommend');
+  assert.equal(parsed.play.length, 1);
+  assert.equal(seen.jsonMode, true, 'must use provider json_object mode');
+  assert.equal(seen.messages.length, 2, 'appends one re-ask instruction');
+  assert.equal(seen.messages[0].content, '放点歌');
+  assert.match(seen.messages[1].content, /JSON/i);
+});
+
+test('reaskJsonObject returns null when the re-ask itself fails', async () => {
+  const parsed = await reaskJsonObject(
+    { system: 's', messages: [], model: 'deepseek-x' },
+    async () => { throw new Error('network'); },
+  );
+  assert.equal(parsed, null);
 });

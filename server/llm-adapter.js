@@ -291,8 +291,30 @@ export async function callLlmStream({ system, messages, model, trigger, onSayDel
     });
   }
 
-  const { say, parsed, status } = splitSayAndJson(fullText);
+  let { say, parsed, status } = splitSayAndJson(fullText);
+  // 流式输出修不动(status=failed) → 用非流式 json_object 模式重问一次,拿确定性合法 JSON。
+  // 模型上一条已经决定了要做什么,这里只是让它把结构化部分重新吐干净。say 已经流式给过,不动。
+  if (status === 'failed') {
+    const reasked = await reaskJsonObject({ system, messages, model, trigger });
+    if (reasked) { parsed = reasked; status = 'reask'; }
+  }
   return { fullText, say, parsed, status };
+}
+
+// 非流式 json_object 重问:provider 原生结构化输出保证合法 JSON。call 可注入便于测试。
+export async function reaskJsonObject({ system, messages, model, trigger }, call = callLlm) {
+  const reMessages = [...messages, {
+    role: 'user',
+    content: '你上一条回复里的 JSON 没能解析。请只重新输出那个 JSON 对象本身'
+      + '(intent / say / play / queueAction / feedback_extract,字段与之前一致),'
+      + '不要任何额外文字、解释或代码块标记。字符串里的引号务必转义。',
+  }];
+  try {
+    const raw = await call({ system, messages: reMessages, model, trigger: `${trigger || 'chat'}-reask`, jsonMode: true });
+    return extractJson(raw);
+  } catch {
+    return null;
+  }
 }
 
 function requireEnv(name) {

@@ -62,9 +62,12 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   │
   4. callLlmStream(llm-adapter.js)
   │    DeepSeek SSE 流式;fence(```) 之前的 prose 逐字 WS 推为 say;整段回来后 splitSayAndJson
-  │    → { say, parsed, status }。status=ok|recovered|failed:JSON.parse 直接失败时先用
+  │    → { say, parsed, status }。status=ok|recovered|reask|failed:JSON.parse 直接失败时先用
   │    repairLooseJson 容错修复(转义 reason 串内漏转义的 "、删尾随逗号)再 parse(recovered);
-  │    仍失败才 failed。避免「模型其实给了 recommend,因一个未转义引号被静默当成 chat、不入队」。
+  │    仍失败则非流式 json_object 模式 reaskJsonObject 重问一次(reask);再失败才 failed。
+  │    避免「模型其实给了 recommend,因一个未转义引号被静默当成 chat、不入队」。
+  │    status=failed → index.js 标 intent=parse_error:不执行队列动作、回一句"没接住,再说一次?"、
+  │    chat_turns 如实记 parse_error(不污染记忆),绝不静默吞。
   │
   5. repairFamiliarNew(align-batch.js)— 确定性对齐,不重试(零延迟)
   │    跨方向的歌换成方向内候选(新→库内),换不到就丢弃(宁短勿偏,queue 可短);
@@ -75,7 +78,9 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   7. resolvePlayList(playback-coordinator.js)
   │    cloudsearch → pickBest(只原唱)→ song/url(exhigh 320k);无 URL 则丢弃
   │
-  8. 更新 currentQueue / now,recordQueue + recordChatTurn(异步 RAG 索引本轮)
+  8. applyChatRecommendation(queue-ops.js)更新 currentQueue / now —— 护栏:playable 为空时
+  │    **不动 queue**(防止"解析空/全无版权 → 整列被清空、now=null、播放中断"),回一句系统提示。
+  │    recordQueue + recordChatTurn(异步 RAG 索引本轮)
   9. broadcast: queue / now / dj_stream_end
 ```
 
