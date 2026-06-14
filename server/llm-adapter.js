@@ -194,21 +194,60 @@ export function extractJson(text) {
   return JSON.parse(jsonStr.trim());
 }
 
+// 容错修复:LLM 偶尔吐非法 JSON——最常见是 reason 字符串里有未转义的 "(见
+// tests/fixtures/broken-json-01.txt)。保守地把字符串内未转义的 " 转义、删尾随逗号。
+// 仅在 JSON.parse 直接失败后调用 → 修坏了也只是继续失败,由上层走 json_object 重问兜底。
+export function repairLooseJson(s) {
+  const nextNonWs = (i) => { let j = i; while (j < s.length && /\s/.test(s[j])) j++; return s[j]; };
+  let out = '';
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) { out += ch; esc = false; continue; }
+      if (ch === '\\') { out += ch; esc = true; continue; }
+      if (ch === '"') {
+        const nxt = nextNonWs(i + 1);
+        // 后面紧跟结构符 → 真正的字符串结束;否则是串内漏转义的引号
+        if (nxt === undefined || nxt === ',' || nxt === '}' || nxt === ']' || nxt === ':') {
+          inStr = false; out += ch;
+        } else {
+          out += '\\"';
+        }
+        continue;
+      }
+      out += ch;
+      continue;
+    }
+    if (ch === '"') { inStr = true; out += ch; continue; }
+    if (ch === ',' && (nextNonWs(i + 1) === '}' || nextNonWs(i + 1) === ']')) continue; // 尾随逗号
+    out += ch;
+  }
+  return out;
+}
+
 // prose-then-JSON 契约:fence 前的纯文本是 say,fence 内是结构化 JSON。
-// 容错:模型若直接吐 JSON(无 prose) → say='';若只有 prose(无 JSON) → intent=chat。
+// 返回 { say, parsed, status }:
+//   ok        直接解析成功,或纯 prose 的合法 chat
+//   recovered repairLooseJson 修复后解析成功
+//   failed    有 JSON 块但修不动 → parsed 退化为 {intent:'chat'};上层据此触发 json_object 重问
 export function splitSayAndJson(text) {
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]+?)```/);
   if (fenceMatch) {
     const say = text.slice(0, fenceMatch.index).trim();
-    let parsed;
-    try { parsed = JSON.parse(fenceMatch[1].trim()); } catch { parsed = { intent: 'chat' }; }
-    return { say, parsed };
+    const body = fenceMatch[1].trim();
+    try { return { say, parsed: JSON.parse(body), status: 'ok' }; } catch {}
+    try { return { say, parsed: JSON.parse(repairLooseJson(body)), status: 'recovered' }; } catch {}
+    return { say, parsed: { intent: 'chat' }, status: 'failed' };
   }
   const trimmed = text.trim();
   if (trimmed.startsWith('{')) {
-    try { return { say: '', parsed: JSON.parse(trimmed) }; } catch {}
+    try { return { say: '', parsed: JSON.parse(trimmed), status: 'ok' }; } catch {}
+    try { return { say: '', parsed: JSON.parse(repairLooseJson(trimmed)), status: 'recovered' }; } catch {}
+    return { say: '', parsed: { intent: 'chat' }, status: 'failed' };
   }
-  return { say: trimmed, parsed: { intent: 'chat' } };
+  return { say: trimmed, parsed: { intent: 'chat' }, status: 'ok' };
 }
 
 // 流式输出 say(逐字)+ 末尾解析 JSON。
@@ -252,8 +291,8 @@ export async function callLlmStream({ system, messages, model, trigger, onSayDel
     });
   }
 
-  const { say, parsed } = splitSayAndJson(fullText);
-  return { fullText, say, parsed };
+  const { say, parsed, status } = splitSayAndJson(fullText);
+  return { fullText, say, parsed, status };
 }
 
 function requireEnv(name) {

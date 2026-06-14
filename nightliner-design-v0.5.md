@@ -62,6 +62,9 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   │
   4. callLlmStream(llm-adapter.js)
   │    DeepSeek SSE 流式;fence(```) 之前的 prose 逐字 WS 推为 say;整段回来后 splitSayAndJson
+  │    → { say, parsed, status }。status=ok|recovered|failed:JSON.parse 直接失败时先用
+  │    repairLooseJson 容错修复(转义 reason 串内漏转义的 "、删尾随逗号)再 parse(recovered);
+  │    仍失败才 failed。避免「模型其实给了 recommend,因一个未转义引号被静默当成 chat、不入队」。
   │
   5. repairFamiliarNew(align-batch.js)— 确定性对齐,不重试(零延迟)
   │    跨方向的歌换成方向内候选(新→库内),换不到就丢弃(宁短勿偏,queue 可短);
