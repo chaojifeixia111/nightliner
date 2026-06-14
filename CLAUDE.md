@@ -23,8 +23,8 @@ npm start                  # 后端 :8080（= node --env-file=.env server/index.
 npm --prefix pwa run dev   # Vite 前端热更新 :5173（代理 /api、/stream 到 :8080）
 npm --prefix pwa run build # 生产构建 → pwa/dist（后端静态托管）
 
-npm test                                          # 全部后端单测（node:test，串行）
-node --env-file=.env --test tests/<file>.test.js  # 单个测试文件
+npm test                                          # 全部后端单测（node:test，串行；自动用 :memory: 库，碰不到生产 state.db）
+node --env-file=.env --test tests/<file>.test.js  # 单个测试文件（同样隔离，靠 NODE_TEST_CONTEXT 检测）
 node --env-file=.env scripts/smoke-rag.js         # 两轮端到端冒烟
 
 npm run index:all          # RAG 全量/增量索引重建

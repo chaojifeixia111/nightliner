@@ -190,6 +190,8 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
 | `chat_turns` | 对话轮(user_message, intent, dj_say, play_titles, feedback_extract…) |
 | `embeddings` / `vec_embeddings` | RAG:元数据+原文 / sqlite-vec 1024 维向量 |
 
+**测试隔离**:`state-db.js` 的 `DB_PATH` 在检测到 `NODE_TEST_CONTEXT`(即 `node --test` 子进程)时改开 `:memory:`,所以单测里的 `DELETE FROM embeddings; DELETE FROM vec_embeddings;` 打不到生产库。`NIGHTLINER_DB` 环境变量可显式覆写路径。(历史 bug:旧代码硬编码 `data/state.db`,每次 `npm test` 都会清空生产 RAG 索引。)
+
 `data/` 其它(均 gitignore):`netease-snapshot.json`(收藏快照)、`apple-music-favorites-2024-2026.md`(收藏)、`tuning.json`(调音台持久化)、`llm-calls.jsonl`(调用日志)、`netease-cookie.txt`(**凭证,勿入库**)。
 
 **内存态**(`index.js`):`currentQueue` / `now` / `playHistory` / **`currentDirection`** / `tuning` / `recommendCache`。

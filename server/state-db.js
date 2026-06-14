@@ -5,7 +5,14 @@ import fs from 'fs';
 import path from 'path';
 import * as sqliteVec from 'sqlite-vec';
 
-const DB_PATH = 'data/state.db';
+// Test isolation: node:test sets NODE_TEST_CONTEXT in every test child process,
+// so under the test runner we open a throwaway in-memory DB. Without this the unit
+// tests — which run `DELETE FROM embeddings` — wipe the production RAG index, since
+// they import this very module. NIGHTLINER_DB is an explicit override if a
+// persistent test fixture is ever needed.
+const DB_PATH = process.env.NIGHTLINER_DB
+  || (process.env.NODE_TEST_CONTEXT ? ':memory:' : 'data/state.db');
+export const dbPath = DB_PATH;
 
 function ensureDir() {
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
