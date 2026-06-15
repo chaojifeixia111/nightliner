@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import db from '../server/state-db.js';
-import { songWeight, songAffinity, artistAffinity, lovedSeeds, graduatedLibrary, negativeKeys, negativeSongs } from '../server/affinity.js';
+import { songWeight, songAffinity, artistAffinity, lovedSeeds, graduatedLibrary, negativeKeys, negativeSongs, liveTasteBlock } from '../server/affinity.js';
 import { songKey } from '../server/explore-pool.js';
 
 function reset() { db.exec("DELETE FROM feedback; DELETE FROM cooldown; DELETE FROM anti_list;"); }
@@ -65,4 +65,20 @@ test('songAffinity merges case-variant rows (no lost loves)', () => {
   const m = songAffinity();
   const entry = m.get(songKey('Run Free', 'Deep Chills'));
   assert.equal(entry.loves, 2, 'case variants combine into one entry with summed loves');
+});
+
+test('liveTasteBlock names top loved artists and recent loves', () => {
+  db.exec("DELETE FROM feedback;");
+  for (let i = 0; i < 3; i++) db.prepare("INSERT INTO feedback (ts,song_title,song_artist,signal) VALUES (?,?,?,?)")
+    .run(Math.floor(Date.now() / 1000), 'S' + i, '徐佳莹', 'love');
+  db.prepare("INSERT INTO feedback (ts,song_title,song_artist,signal) VALUES (?,?,?,?)")
+    .run(Math.floor(Date.now() / 1000), 'Run Free', 'Deep Chills', 'love');
+  const block = liveTasteBlock();
+  assert.match(block, /徐佳莹/);
+  assert.match(block, /Run Free/);
+});
+
+test('liveTasteBlock is graceful when empty', () => {
+  db.exec("DELETE FROM feedback;");
+  assert.equal(typeof liveTasteBlock(), 'string');
 });

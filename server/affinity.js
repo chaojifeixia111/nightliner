@@ -90,3 +90,21 @@ export function negativeSongs() {
 export function wrongVibeSongs() {
   return db.prepare(`SELECT song_title, song_artist FROM feedback WHERE signal='wrong_vibe'`).all();
 }
+
+// Deterministic "current taste" view for the prompt (replaces never-built LLM consolidation).
+export function liveTasteBlock() {
+  const artists = [...artistAffinity().values()].sort((a, b) => b.loves - a.loves).slice(0, 8);
+  const recent = db.prepare(`
+    SELECT song_title, song_artist, COUNT(*) loves, MAX(ts) lastTs
+    FROM feedback WHERE signal='love'
+    GROUP BY song_title, song_artist ORDER BY lastTs DESC LIMIT 12
+  `).all();
+  if (!artists.length && !recent.length) return '(还没有 love 反馈积累 —— 暂以静态档案为准)';
+  const artistLine = artists.length
+    ? '最常 love 的艺人:' + artists.map(a => `${a.name}${a.loves > 1 ? `(${a.loves})` : ''}`).join('、')
+    : '';
+  const songLine = recent.length
+    ? '最近 love 的歌:' + recent.map(r => `${r.song_title} / ${r.song_artist}`).join(' · ')
+    : '';
+  return [artistLine, songLine].filter(Boolean).join('\n');
+}
