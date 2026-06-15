@@ -257,7 +257,7 @@ WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `
 | `HeroCard.vue` | 封面 / 歌名 / 进度 / `<audio>` 控制 / **音量持久化(localStorage `nl_volume`,默认 33)** / ❤ 常驻 + hover 出 × 反馈面板 / **队列入口(list 图标 → QueueDrawer)** |
 | `TuningDrawer.vue` | **调音台**:探索档位(5 档吸附滑块,显示英文名)/ Queue 长度 |
 | `QueueDrawer.vue` | queue 预览 + CLEAR 清空待播(只在有待播歌时显示);每行 hover 出 × 单独移除待播歌,正在播的那首不可删 |
-| `ChatInput.vue` | 底部常驻输入 + **搜索入口(左侧放大镜 → 打开搜索整页)** |
+| `ChatInput.vue` | 底部常驻输入 + **搜索入口(左侧放大镜 → 把输入框已打的字直接带进搜索整页并搜出;空则开空搜索)** |
 | `DJLog.vue` | DJ 流式气泡(逐字)+ 系统消息 |
 | `AppHeader.vue` | masthead:wordmark + ON AIR(播放时)+ **▦ Listen 入口** + **TUNING**(2026-06:搜索移入输入栏、队列移入播放栏,刊头只剩这两个;窄屏 ON AIR 退化为呼吸金点) |
 | `ListenPage.vue` | **Listen 整页**:6 张「点即播」卡(Today's Picks + Comfort/Cozy/Balanced/Venture/Wild)→ `POST /api/listen` 生成开播;Esc/✕ 关闭 |

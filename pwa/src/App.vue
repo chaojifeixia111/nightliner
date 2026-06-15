@@ -17,7 +17,7 @@
     <div class="djlog-wrap">
       <DJLog :messages="djMessages" :thinking="thinking" :stats="lastStats" :streaming-id="streamingId" />
     </div>
-    <ChatInput :busy="thinking" @send="onChat" @command="onCommand" @open-search="openDiscover('search')" />
+    <ChatInput :busy="thinking" @send="onChat" @command="onCommand" @open-search="openDiscover('search', $event)" />
     <TuningDrawer
       :open="tuningOpen"
       :tuning="state.tuning"
@@ -33,6 +33,7 @@
     <DiscoverPage
       :open="discoverOpen"
       :variant="discoverVariant"
+      :initial-query="discoverQuery"
       :now="state.now"
       @close="discoverOpen = false"
     />
@@ -58,9 +59,11 @@ const queueOpen = ref(false);
 const listenOpen = ref(false);
 const discoverOpen = ref(false);
 const discoverVariant = ref('daily');   // 'daily' | 'search'
+const discoverQuery = ref('');          // 从输入栏带进搜索页的初始查询
 
-function openDiscover(variant) {
+function openDiscover(variant, query = '') {
   discoverVariant.value = variant;
+  discoverQuery.value = query;
   discoverOpen.value = true;
 }
 const thinking = ref(false);

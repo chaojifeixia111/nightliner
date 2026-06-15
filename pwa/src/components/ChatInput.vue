@@ -1,6 +1,6 @@
 <template>
   <form class="chat-pill" :class="{ focused, busy }" @submit.prevent="onSubmit">
-    <button type="button" class="search-btn" @click="$emit('open-search')" aria-label="Search">
+    <button type="button" class="search-btn" @click="onSearch" aria-label="Search">
       <Icon name="search" :size="15" />
     </button>
     <input
@@ -49,6 +49,12 @@ function onSubmit() {
   text.value = '';
   // Refresh greeting on next focus
   placeholder.value = pickGreeting();
+}
+
+// 放大镜:把输入框里已经打好的字直接带进搜索页(空则打开空搜索)
+function onSearch() {
+  emit('open-search', text.value.trim());
+  text.value = '';
 }
 </script>
 

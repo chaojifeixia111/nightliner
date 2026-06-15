@@ -71,6 +71,7 @@ const props = defineProps({
   open: Boolean,
   variant: { type: String, default: 'daily' },   // 'daily' | 'search'
   now: Object,
+  initialQuery: { type: String, default: '' },
 });
 const emit = defineEmits(['close']);
 
@@ -104,7 +105,10 @@ watch(() => props.open, (isOpen) => {
   if (isOpen) {
     window.addEventListener('keydown', onKey);
     if (props.variant === 'daily' && (!dailyLoaded || !daily.value.length)) loadDaily();
-    if (props.variant === 'search') nextTick(() => box.value?.focus());
+    if (props.variant === 'search') {
+      query.value = props.initialQuery || '';   // 带着输入栏的字进来就直接搜;空则清空开新搜索
+      nextTick(() => box.value?.focus());
+    }
   } else {
     window.removeEventListener('keydown', onKey);
   }
