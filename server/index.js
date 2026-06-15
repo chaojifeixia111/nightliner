@@ -424,12 +424,13 @@ app.post('/api/queue/remove', (req, res) => {
 
 // POST /api/feedback
 app.post('/api/feedback', (req, res) => {
-  const { title, artist, signal, reason } = req.body;
+  const { title, artist, signal, reason, ncm_id } = req.body;
   if (!title || !artist || !signal) return res.status(400).json({ error: 'fields missing' });
   recordFeedback({
     song_title: title,
     song_artist: artist,
     signal,
+    ncm_id: ncm_id ?? null,
     context_json: reason ? { reason, source: 'button' } : { source: 'button' },
   });
   res.json({ ok: true });

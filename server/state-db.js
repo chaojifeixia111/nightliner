@@ -39,6 +39,7 @@ function migrate(db) {
       song_title TEXT NOT NULL,
       song_artist TEXT NOT NULL,
       signal TEXT NOT NULL,
+      ncm_id INTEGER,
       context_json TEXT
     );
 
@@ -100,6 +101,12 @@ function migrate(db) {
       embedding FLOAT[1024]
     );
   `);
+
+  // idempotent column add for pre-existing DBs (CREATE TABLE only runs on fresh DBs)
+  const fbCols = db.prepare(`PRAGMA table_info(feedback)`).all();
+  if (!fbCols.some(c => c.name === 'ncm_id')) {
+    db.exec(`ALTER TABLE feedback ADD COLUMN ncm_id INTEGER`);
+  }
 }
 
 ensureDir();
@@ -129,13 +136,14 @@ export function recordPlay(event) {
 
 export function recordFeedback(fb) {
   db.prepare(`
-    INSERT INTO feedback (ts, song_title, song_artist, signal, context_json)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO feedback (ts, song_title, song_artist, signal, ncm_id, context_json)
+    VALUES (?, ?, ?, ?, ?, ?)
   `).run(
     Math.floor(Date.now() / 1000),
     fb.song_title,
     fb.song_artist,
     fb.signal,
+    fb.ncm_id ?? null,
     fb.context_json ? JSON.stringify(fb.context_json) : null
   );
 
