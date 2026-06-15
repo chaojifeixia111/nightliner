@@ -58,7 +58,8 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   │    c. 方向激活:库内片段从「全量收藏按方向采样」;recommend/explore 池按方向过滤
   │    d. buildExplorePool:种子(方向内收藏曲 / now-playing / RAG)→ simi 近邻 + 同艺人深挖
   │    e. 负反馈:wrong_vibe → explore 排除 + avoid-list(skip 不再降权)
-  │    f. 拼 system + 最近 5 轮 messages[] + user-turn(填入所有池子/约束)
+  │    f. 口味优先:librarySlice 按 songWeight(love 亲和度)降序排列;explore 种子从 lovedSeeds(4) 开始;user-turn 注入 {{LIVE_TASTE}} 块(affinity.liveTasteBlock —— 近期 love 艺人 + 歌曲,优先于静态 taste.md)
+  │    g. 拼 system + 最近 5 轮 messages[] + user-turn(填入所有池子/约束)
   │
   4. callLlmStream(llm-adapter.js)
   │    DeepSeek SSE 流式;fence(```) 之前的 prose 逐字 WS 推为 say;整段回来后 splitSayAndJson

@@ -2,7 +2,7 @@
 // 拼装 chat-mode prompt 的 9 个片段（含 netease 曲库 + 推荐池 + 对话历史）
 import fs from 'fs/promises';
 import db, { recentPlays, recentFeedback, antiList, activeCooldowns, recentChatTurns } from './state-db.js';
-import { wrongVibeSongs, negativeKeys } from './affinity.js';
+import { wrongVibeSongs, negativeKeys, songAffinity, artistAffinity, songWeight, lovedSeeds, liveTasteBlock } from './affinity.js';
 import { retrieveContext } from './retriever.js';
 import { buildExplorePool, songKey } from './explore-pool.js';
 import { modeForValue, familiarTarget } from './exploration-modes.js';
@@ -329,6 +329,13 @@ export async function buildChatMessages({
       : retrieved.songs.filter(s => dirMatch(s.name, s.artist));
   }
 
+  // 按 love 亲和度排序库内片段 —— 用户 love 过的艺人/歌曲优先出现在 prompt 靠前位置
+  const _songAff = songAffinity(), _artistAff = artistAffinity();
+  librarySlice = [...librarySlice].sort(
+    (a, b) => songWeight({ name: b.name, artist: b.artist }, { songAff: _songAff, artistAff: _artistAff })
+            - songWeight({ name: a.name, artist: a.artist }, { songAff: _songAff, artistAff: _artistAff })
+  );
+
   // 推荐池(网易云每日)按方向过滤 —— 方向是硬约束,跨语种的歌直接不进池。
   const dirRecommend = direction ? resolvedPool.filter(s => dirMatch(s.name, s.artist)) : resolvedPool;
 
@@ -344,6 +351,7 @@ export async function buildChatMessages({
     }
     if (!seeds.length) {
       // 无方向(或方向内无带 id 的种子)→ now-playing + RAG 随机种子(原行为)
+      seeds.push(...lovedSeeds(4));
       if (now && typeof now.ncm_id === 'number') seeds.push({ ncm_id: now.ncm_id, name: now.title, artist: now.artist });
       for (const s of shuffle(retrieved.songs.filter(s => typeof s.ncm_id === 'number'))) {
         if (seeds.length >= 5) break;
@@ -391,6 +399,7 @@ export async function buildChatMessages({
     .replace('{{REC_PCT}}', String(recPct))
     .replace('{{WILD_PCT}}', String(wildPct))
     .replace('{{DIRECTION}}', direction ? describeDirection(direction) : '(无 —— 开放推荐,按你整体口味来)')
+    .replace('{{LIVE_TASTE}}', liveTasteBlock())
     .replace('{{N_SONGS}}', String(librarySlice.length))
     .replace('{{N}}', String(n))
     .replace('{{LIBRARY_SLICE}}', fmtSongs(librarySlice))
