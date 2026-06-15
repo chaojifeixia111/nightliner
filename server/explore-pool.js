@@ -4,7 +4,7 @@
 import { simiSong, songDetail, artistTopSongs } from './ncm-client.js';
 
 // 归一化歌名/艺人,用于去重和排除集匹配
-function norm(s) {
+export function norm(s) {
   return (s || '').toLowerCase().replace(/\s+/g, '').replace(/[（）()·・,，.。!！?？'’"]/g, '');
 }
 
