@@ -1,7 +1,7 @@
 // tests/playlist-builder.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPlaylist, plKey } from '../server/playlist-builder.js';
+import { buildPlaylist, plKey, weightedOrder } from '../server/playlist-builder.js';
 
 const mk = (prefix, count) =>
   Array.from({ length: count }, (_, i) => ({ ncm_id: `${prefix}${i}`, name: `${prefix}${i}`, artist: `${prefix}art${i}` }));
@@ -75,4 +75,21 @@ test('纯函数:不改入参池', () => {
 
 test('全空池 → []', () => {
   assert.deepEqual(buildPlaylist({ value: 50, n: 25, pools: {} }), []);
+});
+
+test('weightedOrder ranks higher-weight items first (constant rng)', () => {
+  const items = [{ id: 'a', w: 1 }, { id: 'b', w: 4 }, { id: 'c', w: 100 }];
+  const order = weightedOrder(items, it => it.w, () => 0.5);
+  assert.deepEqual(order.map(x => x.id), ['c', 'b', 'a']);
+});
+
+test('buildPlaylist weightOf favors high-affinity songs', () => {
+  const lib = [];
+  for (let i = 0; i < 10; i++) lib.push({ name: 'L' + i, artist: 'a', ncm_id: i });
+  const out = buildPlaylist({
+    value: 0, n: 3, pools: { library: lib },
+    weightOf: (s) => (s.name === 'L7' ? 1000 : 1),
+    rng: () => 0.5,
+  });
+  assert.ok(out.some(s => s.name === 'L7'), 'heavily-weighted song is selected');
 });
