@@ -254,7 +254,7 @@ WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `
 | 组件 | 职责 |
 |---|---|
 | `App.vue` | WS 连接 + 状态根 + 事件分发(onFeedback/onSkip/…) |
-| `HeroCard.vue` | 封面 / 歌名 / 进度 / `<audio>` 控制 / **音量持久化(localStorage `nl_volume`,默认 33)** / ❤ 常驻 + hover 出 × 反馈面板 / **队列入口(list 图标 → QueueDrawer)** |
+| `HeroCard.vue` | 封面 / 歌名 / 进度 / `<audio>` 控制（**播放/暂停图标完全由 `<audio>` 的 play/pause 事件回写,不手动翻转——刷新后被拦截的 autoplay / OS 媒体键都能正确同步;空格键 = 暂停/播放,文本框内不拦截**)/ **音量持久化(localStorage `nl_volume`,默认 33)** / ❤ 常驻 + hover 出 × 反馈面板 / **队列入口(list 图标 → QueueDrawer)** |
 | `TuningDrawer.vue` | **调音台**:探索档位(5 档吸附滑块,显示英文名)/ Queue 长度 |
 | `QueueDrawer.vue` | queue 预览 + CLEAR 清空待播(只在有待播歌时显示);每行 hover 出 × 单独移除待播歌,正在播的那首不可删 |
 | `ChatInput.vue` | 底部常驻输入 + **搜索入口(左侧放大镜 → 把输入框已打的字直接带进搜索整页并搜出;空则开空搜索)** |

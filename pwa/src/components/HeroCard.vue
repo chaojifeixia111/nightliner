@@ -93,6 +93,8 @@
       @seeked="stopBuffering"
       @playing="stopBuffering"
       @canplay="stopBuffering"
+      @play="onPlay"
+      @pause="onPause"
     />
   </div>
 </template>
@@ -105,12 +107,26 @@ import { extractAmbient } from '../utils/ambient.js';
 const props = defineProps({ state: Object });
 const emit = defineEmits(['feedback', 'skip', 'previous', 'user-message', 'playing-change', 'open-queue']);
 
-onMounted(() => { applyVolume(); });
-onUnmounted(() => { clearTimeout(bufferTimer); });
+onMounted(() => { applyVolume(); window.addEventListener('keydown', onKeydown); });
+onUnmounted(() => { clearTimeout(bufferTimer); window.removeEventListener('keydown', onKeydown); });
+
+// 空格 = 暂停/播放(正常音乐 App 行为)。
+// preventDefault 一举两得:① 阻止页面滚动;② 阻止空格"点击"当前聚焦的按钮——
+// 之前刚点过红心后红心按钮还聚焦着,按空格就被浏览器当成再点一次红心。
+function onKeydown(e) {
+  if (e.code !== 'Space') return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  e.preventDefault();
+  togglePlay();
+}
 
 // Audio state
 const audio = ref(null);
-const paused = ref(false);
+// 图标状态完全由 <audio> 的真实 play/pause 事件驱动(见 onPlay/onPause),
+// 而不是手动翻转——否则刷新后浏览器拦截 autoplay、或 OS 媒体键暂停时,
+// 图标会和实际播放状态脱钩("死 icon")。初值 true:还没真正播起来就显示播放键。
+const paused = ref(true);
 
 watch([() => props.state.now, paused], ([now, p]) => {
   emit('playing-change', !!now && !p);
@@ -197,9 +213,13 @@ function stopBuffering() {
 
 function togglePlay() {
   if (!audio.value) return;
-  if (audio.value.paused) { audio.value.play(); paused.value = false; }
-  else { audio.value.pause(); paused.value = true; stopBuffering(); }
+  // 只下命令,不改图标——paused 由下面的 play/pause 事件回写,保证图标永远跟真实状态一致。
+  if (audio.value.paused) audio.value.play().catch(() => {});
+  else audio.value.pause();
 }
+
+function onPlay() { paused.value = false; }
+function onPause() { paused.value = true; stopBuffering(); }
 
 function toggleMute() {
   if (!audio.value) return;
@@ -274,7 +294,7 @@ watch(() => props.state.now?.title, (newTitle, oldTitle) => {
   currentSec.value = 0;
   durationSec.value = 0;
   progressPct.value = 0;
-  paused.value = false;
+  // 不在这里手动设 paused——换歌后新 src 自动播放会触发 play 事件回写图标。
   stopBuffering();
 });
 
@@ -464,8 +484,11 @@ function cancelDislike() {
   padding: 6px 0 16px;
 }
 .ghost-btn {
+  position: relative;
+  overflow: hidden;
   background: none;
   border: none;
+  border-radius: 50%;
   padding: 6px;
   cursor: pointer;
   color: var(--paper-2);
@@ -474,6 +497,24 @@ function cancelDislike() {
   justify-content: center;
   transition: color 0.18s, transform 0.18s;
 }
+/* 点击灰白闪烁:按下瞬间灰白圈铺满,松开后 0.4s 淡出——快速点一下也能看到一闪。 */
+.ghost-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(235, 235, 240, 0.5), rgba(235, 235, 240, 0) 72%);
+  opacity: 0;
+  transform: scale(0.3);
+  pointer-events: none;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.ghost-btn:active::after {
+  opacity: 1;
+  transform: scale(1);
+  transition: none;   /* 按下立刻出现,不等过渡 */
+}
+.ghost-btn :deep(svg) { position: relative; z-index: 1; }
 .ghost-btn:hover { color: var(--paper-0); }
 .ghost-btn:active { transform: scale(0.92); }
 .transport { display: flex; align-items: center; gap: 18px; }
