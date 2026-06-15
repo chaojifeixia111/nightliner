@@ -229,6 +229,7 @@ GET  /api/search             ?q=&type=song|artist —— 歌曲(cloudsearch type
 GET  /api/artist/songs       ?id= —— 歌手热门曲(/artist/top/song)
 POST /api/play               手动点播 {title, artist, ncm_id?, mode:'now'|'queue'}
 POST /api/listen             点即播歌单 {level: daily|comfort|cozy|balanced|venture|wild} → 生成整批替换 queue 并从首歌开播
+                             (5档) 库池合并 graduatedLibrary(loved discoveries not yet in library)；以 lovedSeeds 代替随机库歌做探索种子(cold-start fallback 随机)；excludeKeys 追加 negativeSongs(wrong_vibe + cooldown)；buildPlaylist 传入 weightOf=songWeight 按 affinity 加权排序。
 GET  /api/state/anti         anti-list
 GET  /api/state/cooldown     active cooldowns
 GET  /api/state/history      最近 10 轮 chat_turns

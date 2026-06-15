@@ -18,7 +18,8 @@ import { checkReasonHallucination } from './budget-enforcer.js';
 import { normalizeSearchSongs, normalizeSearchArtists, normalizeArtistSongs } from './search-normalize.js';
 import { playNow, enqueue, clearUpcoming, removeFromQueue, sameSong, applyChatRecommendation } from './queue-ops.js';
 import { buildPlaylist, plKey } from './playlist-builder.js';
-import { buildExplorePool } from './explore-pool.js';
+import { buildExplorePool, songKey } from './explore-pool.js';
+import { songAffinity, artistAffinity, songWeight, lovedSeeds, graduatedLibrary, negativeSongs } from './affinity.js';
 
 const config = yaml.parse(await fs.readFile('config.yaml', 'utf8'));
 const PORT = process.env.PORT || config.server.port; // PORT 环境变量可覆盖(开发/preview 用)
@@ -630,13 +631,22 @@ app.post('/api/listen', async (req, res) => {
       songs = [...(daily.length ? daily : pool)].sort(() => Math.random() - 0.5).slice(0, n);
     } else if (level in LEVEL_VALUE) {
       const [library, recommend] = await Promise.all([getLibraryPool(), getRecommendPool()]);
-      const seeds = [...library].sort(() => Math.random() - 0.5).slice(0, 5)
-        .map(s => ({ ncm_id: s.ncm_id, name: s.name, artist: s.artist }));
+      // graduate loved discoveries into the familiar pool (augment, don't replace)
+      const libKeySet = new Set(library.map(s => songKey(s.name, s.artist)));
+      const fullLibrary = [...library, ...graduatedLibrary(libKeySet)];
+      // seed exploration from what Elliot LOVES (fallback to random library on cold start)
+      const seeds = lovedSeeds(5).length
+        ? lovedSeeds(5)
+        : [...library].sort(() => Math.random() - 0.5).slice(0, 5)
+            .map(s => ({ ncm_id: s.ncm_id, name: s.name, artist: s.artist }));
       const wildcard = await buildExplorePool({ seeds, perSeedCap: 3, limit: 40 }).catch(() => []);
       const excludeKeys = new Set();
       for (const a of antiList()) excludeKeys.add(plKey({ name: a.song_title, artist: a.song_artist }));
       for (const p of recentPlays(20)) excludeKeys.add(plKey({ name: p.title, artist: p.artist }));
-      songs = buildPlaylist({ value: LEVEL_VALUE[level], n, pools: { library, recommend, wildcard }, excludeKeys });
+      for (const nv of negativeSongs()) excludeKeys.add(plKey({ name: nv.song_title, artist: nv.song_artist })); // wrong_vibe + cooldown
+      const songAff = songAffinity(), artistAff = artistAffinity();
+      const weightOf = (s) => songWeight(s, { songAff, artistAff });
+      songs = buildPlaylist({ value: LEVEL_VALUE[level], n, pools: { library: fullLibrary, recommend, wildcard }, excludeKeys, weightOf });
     } else {
       return res.status(400).json({ ok: false, reason: 'bad_level' });
     }
