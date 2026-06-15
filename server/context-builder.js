@@ -1,7 +1,8 @@
 // server/context-builder.js
 // 拼装 chat-mode prompt 的 9 个片段（含 netease 曲库 + 推荐池 + 对话历史）
 import fs from 'fs/promises';
-import db, { recentPlays, recentFeedback, antiList, activeCooldowns, recentChatTurns, skipStats, staleLoves } from './state-db.js';
+import db, { recentPlays, recentFeedback, antiList, activeCooldowns, recentChatTurns } from './state-db.js';
+import { wrongVibeSongs, negativeKeys } from './affinity.js';
 import { retrieveContext } from './retriever.js';
 import { buildExplorePool, songKey } from './explore-pool.js';
 import { modeForValue, familiarTarget } from './exploration-modes.js';
@@ -259,10 +260,7 @@ function humanAge(sec) {
 function fmtFeedbackRag(fbs) {
   if (!fbs.length) return '(无相关反馈召回)';
   return fbs.map(f => {
-    const days = (Date.now() / 1000 - (f.ts || 0)) / 86400;
-    // 旧 love 衰减:超过 90 天的「喜欢」别再当作当前口味(口味有时效性)
-    const stale = f.signal === 'love' && days > 90 ? ' ⚠旧爱(可能已过气,别当当前口味)' : '';
-    return `- [${f.signal}] ${f.title} / ${f.artist} (${humanAge(f.ts)})${f.reason ? ' · ' + f.reason : ''}${stale}`;
+    return `- [${f.signal}] ${f.title} / ${f.artist} (${humanAge(f.ts)})${f.reason ? ' · ' + f.reason : ''}`;
   }).join('\n');
 }
 function fmtSnippets(arr, empty = '(无相关召回)') {
@@ -317,11 +315,9 @@ export async function buildChatMessages({
   const libKeys = await libraryKeys();        // 复用:既给 explore 排除,也给 server 校验
   const dirMatch = (name, artist) => songMatchesDirection(name, artist, direction);
 
-  // 降权集:近期频繁跳过 + 「曾 love 现跳」的旧爱。滚动 30 天窗口,自动过期(不写永久 cooldown)。
-  const demotedRows = [...skipStats({ sinceDays: 30, minSkips: 3 }), ...staleLoves({ sinceDays: 30, minSkips: 2 })];
-  const demotedMap = new Map();
-  for (const r of demotedRows) demotedMap.set(songKey(r.song_title, r.song_artist), r);
-  const demoted = [...demotedMap.values()];
+  // 负反馈:wrong_vibe = 明确不喜欢(别再推)。skip 不再降权(skip 是正常浏览行为)。
+  const demoted = wrongVibeSongs();
+  const negKeys = negativeKeys();
 
   // 曲库片段:方向激活时从「全量收藏里符合方向的歌」随机采样(而非只取 RAG top-K),
   // 既保证够多的库内候选,又每次给不同的歌 → 直接缓解「老推同几首安全牌」。
@@ -364,7 +360,7 @@ export async function buildChatMessages({
           excludeKeys.add(songKey(f.song_title, f.song_artist));
         }
       }
-      for (const d of demoted) excludeKeys.add(songKey(d.song_title, d.song_artist));  // 降权集也排除
+      for (const k of negKeys) excludeKeys.add(k);  // wrong_vibe + cooldown 不进 explore
       explorePool = await buildExplorePool({
         seeds, excludeKeys,
         perSeedCap: direction ? Math.max(mode.perSeedCap, 2) : mode.perSeedCap,
@@ -405,7 +401,7 @@ export async function buildChatMessages({
         : '(今天的每日推荐没拉到 —— 可能 cookie 过期或本地 NCM 服务未启动;本轮没有 recommend 池,别凭空编 recommend 歌)'))
     .replace('{{EXPLORE_POOL}}', fmtExplorePool(explorePool))
     .replace('{{DEMOTED}}', demoted.length
-      ? demoted.map(d => `- ${d.song_title} / ${d.song_artist} (近期跳过 ${d.skips} 次)`).join('\n')
+      ? demoted.map(d => `- ${d.song_title} / ${d.song_artist} (你标记过 wrong_vibe)`).join('\n')
       : '(无)')
     .replace('{{FEEDBACK_SLICE}}', fmtFeedbackRag(retrieved.feedback))
     .replace('{{TASTE_SLICE}}', fmtSnippets(retrieved.taste_snippets))

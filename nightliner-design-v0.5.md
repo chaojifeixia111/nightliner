@@ -57,7 +57,7 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   │    b. modeForValue(exploration_pct) → 档位 → familiar/new 目标数
   │    c. 方向激活:库内片段从「全量收藏按方向采样」;recommend/explore 池按方向过滤
   │    d. buildExplorePool:种子(方向内收藏曲 / now-playing / RAG)→ simi 近邻 + 同艺人深挖
-  │    e. 降权集:skipStats + staleLoves → explore 排除 + prompt avoid-list
+  │    e. 负反馈:wrong_vibe → explore 排除 + avoid-list(skip 不再降权)
   │    f. 拼 system + 最近 5 轮 messages[] + user-turn(填入所有池子/约束)
   │
   4. callLlmStream(llm-adapter.js)
@@ -134,7 +134,7 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
 | `recommend` | 网易云每日 daily + 2×personal_fm | 去重、30min 缓存、每轮 shuffle 取 20。方向激活时按方向过滤。 |
 | `wildcard` | `explore-pool.js` | **simi 近邻 + 同艺人深挖(deepcut)**。多种子并集、丢弃网易云原序、每种子限量、共识加权 + 随机采样。 |
 
-**Agency 原则**(memory: `feedback_agent_agency_recs`):网易云 `/simi/song` 只作**候选生成**,agent 自己去重/过滤/打散/重排,**绝不照搬外部排序**。explore 排除集 = 已收藏 + anti + cooldown + 最近播放 + 负反馈 + **降权集**。
+**Agency 原则**(memory: `feedback_agent_agency_recs`):网易云 `/simi/song` 只作**候选生成**,agent 自己去重/过滤/打散/重排,**绝不照搬外部排序**。explore 排除集 = 已收藏 + anti + cooldown + 最近播放 + **wrong_vibe(负反馈)**。
 
 ### 3.4 反馈飞轮 + 衰减(口味时效性)
 
@@ -147,11 +147,10 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   | 🔁 太熟了 | `too_familiar` | 进 `cooldown` 90 天 |
   | 🚫 别再播 | `never_again` | 进 `anti_list` 永久禁播 |
 
-- **衰减(2026-05-30)**:
-  - 旧 love:RAG 召回里 >90 天的 love 标注「⚠旧爱(可能已过气)」,不当作当前口味。
-  - **skip-demote**:`skipStats`(30 天内 user_skip ≥3 次)→ explore 排除 + prompt「近期降权」avoid-list。
-  - **stale-love**:`staleLoves`(love 过且 30 天内 skip ≥2 次 =「曾爱现跳」)→ 同上降权。
-  - 滚动 30 天窗口,**自动过期**(不写永久 cooldown,口味可回来)。
+- **负反馈处理(2026-06-15 更新)**:
+  - **wrong_vibe**:从 explore 排除 + prompt「不喜欢」avoid-list(明确不喜欢,别再推)。
+  - skip 不再降权:skip 是正常浏览行为,不作为降权信号(已移除 `skipStats` / `staleLoves`)。
+  - love 不再衰减:移除 >90 天 ⚠旧爱标注;love 视为持久口味(用户自己 wrong_vibe 来修正)。
 - **信号源**:PWA 自身 `<audio>` 事件——`/api/play-event`(`natural`)、`/api/skip`(`user_skip`)。**没有 MediaRemote**(那是 macOS 方案,留待迁 Mac)。
 
 ---
@@ -294,7 +293,7 @@ server/
   indexer.js            chunk + indexSong/Feedback/ChatTurn/MdFile + indexAll*
   embedder.js           BGE-M3(@huggingface/transformers ONNX q8)embed/embedBatch/warmup
   vec-store.js          searchSimilar({embedding, source_type, top_k})
-  state-db.js           SQLite + sqlite-vec;play/feedback/queue/chatTurn + skipStats/staleLoves + embeddings CRUD
+  state-db.js           SQLite + sqlite-vec;play/feedback/queue/chatTurn + embeddings CRUD
   ncm-client.js         网易云封装(cloudsearch/searchArtists/songUrl/recommend/personalFm/simiSong/artistTopSongs/…)
   llm-adapter.js        callLlm / callLlmStream(SSE)/ splitSayAndJson / extractJson;多 provider 路由
   llm-logger.js         llm-calls.jsonl 落盘
@@ -340,7 +339,7 @@ config.yaml             见 §九
 - **起服务 / 重建索引 / 看日志 / 手测 chat**:见 [docs/RAG.md](docs/RAG.md)。
 - **改 prompt**:只改 `prompts/*.md`,不动代码。
 - **改探索行为**:`server/exploration-modes.js`(档位配方)、`server/direction.js`(方向检测/匹配)。
-- **改反馈衰减**:`server/state-db.js`(`skipStats` / `staleLoves` 阈值)+ `server/context-builder.js`(降权接线)。
+- **改负反馈行为**:`server/affinity.js`(`wrongVibeSongs` / `negativeKeys`)+ `server/context-builder.js`(接线)。
 
 ---
 

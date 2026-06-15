@@ -195,36 +195,6 @@ export function activeCooldowns() {
   `).all(now);
 }
 
-// 近期被频繁跳过的歌(隐式负反馈)。滚动窗口,自然过期——不写永久 cooldown,
-// 这样某段时间跳过的歌过了窗口会自己回来,符合「口味有时效性」。
-export function skipStats({ sinceDays = 30, minSkips = 3 } = {}) {
-  const since = Math.floor(Date.now() / 1000) - sinceDays * 86400;
-  return db.prepare(`
-    SELECT title AS song_title, artist AS song_artist, COUNT(*) AS skips, MAX(ts) AS last_ts
-    FROM play_events
-    WHERE ended_reason = 'user_skip' AND ts > ?
-    GROUP BY title, artist
-    HAVING skips >= ?
-    ORDER BY skips DESC
-  `).all(since, minSkips);
-}
-
-// 「以前 love 过、最近却在跳」的歌 —— 阶段过去了。比纯跳过更强的降权信号。
-export function staleLoves({ sinceDays = 30, minSkips = 2 } = {}) {
-  const since = Math.floor(Date.now() / 1000) - sinceDays * 86400;
-  return db.prepare(`
-    SELECT p.title AS song_title, p.artist AS song_artist, COUNT(*) AS skips, MAX(p.ts) AS last_ts
-    FROM play_events p
-    WHERE p.ended_reason = 'user_skip' AND p.ts > ?
-      AND EXISTS (
-        SELECT 1 FROM feedback f
-        WHERE f.signal = 'love' AND f.song_title = p.title AND f.song_artist = p.artist
-      )
-    GROUP BY p.title, p.artist
-    HAVING skips >= ?
-    ORDER BY skips DESC
-  `).all(since, minSkips);
-}
 
 export function recordQueue(queue) {
   return db.prepare(`

@@ -59,7 +59,7 @@
 ### Cooldown (90 天降权)
 {{COOLDOWNS}}
 
-### 近期降权(频繁跳过 / 曾爱现跳 —— 别再推,除非用户这轮点名要)
+### 不喜欢(wrong_vibe —— 别再推)
 {{DEMOTED}}
 
 ### RECENT_PLAYS (不可重复)
