@@ -137,13 +137,13 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
 
 **Agency 原则**(memory: `feedback_agent_agency_recs`):网易云 `/simi/song` 只作**候选生成**,agent 自己去重/过滤/打散/重排,**绝不照搬外部排序**。explore 排除集 = 已收藏 + anti + cooldown + 最近播放 + **wrong_vibe(负反馈)**。
 
-### 3.4 反馈飞轮 + 衰减(口味时效性)
+### 3.4 反馈飞轮(love 持久累积 · 负反馈即时;2026-06-15 重构为 affinity 学习层)
 
 - **4 键反馈**(写 `feedback` 表 + 异步 RAG 索引):
 
   | 键 | signal | 后端 |
   |---|---|---|
-  | ❤️ 喜欢 | `love` | 记录 + RAG 索引(不永久等权,见衰减) |
+  | ❤️ 喜欢 | `love` | 记录(带 ncm_id)+ RAG 索引 + `affinity.js` 累积亲和度(持久,不衰减;多次 love 加深权重) |
   | 💢 不对味 | `wrong_vibe` | 记录;从 explore 排除 |
   | 🔁 太熟了 | `too_familiar` | 进 `cooldown` 90 天 |
   | 🚫 别再播 | `never_again` | 进 `anti_list` 永久禁播 |
@@ -152,6 +152,10 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   - **wrong_vibe**:从 explore 排除 + prompt「不喜欢」avoid-list(明确不喜欢,别再推)。
   - skip 不再降权:skip 是正常浏览行为,不作为降权信号(已移除 `skipStats` / `staleLoves`)。
   - love 不再衰减:移除 >90 天 ⚠旧爱标注;love 视为持久口味(用户自己 wrong_vibe 来修正)。
+- **affinity 学习层(`server/affinity.js`,2026-06-15)**:从 `feedback` 表**在线派生**「歌/艺人」累积亲和度(无独立存储),喂给**两条路径**:
+  - **Listen(venture/wild)**:`songWeight` 加权选曲;`graduatedLibrary` 把没在库的 loved 歌并入库内池(loved 发现「毕业」进轮换,不再评论完就蒸发);explore 种子用 `lovedSeeds` 而非随机库歌;`negativeSongs` 排除 wrong_vibe + cooldown。
+  - **chat**:librarySlice 按亲和度排序;no-direction explore 种子优先 `lovedSeeds`;prompt 注入 `liveTasteBlock`(近期 love 艺人/歌,优先于静态 taste.md)。
+  - 新 love **即时**影响下一次推荐(派生即读)。legacy 一次性补 id:`scripts/backfill-feedback-ncmid.js`。
 - **信号源**:PWA 自身 `<audio>` 事件——`/api/play-event`(`natural`)、`/api/skip`(`user_skip`)。**没有 MediaRemote**(那是 macOS 方案,留待迁 Mac)。
 
 ---

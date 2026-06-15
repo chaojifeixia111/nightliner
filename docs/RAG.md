@@ -120,7 +120,8 @@ server/
   explore-pool.js       buildExplorePool:simi 近邻 + 同艺人深挖
   llm-adapter.js        callLlm / callLlmStream(SSE 流式)/ splitSayAndJson;多 provider 分发
   budget-enforcer.js    checkReasonHallucination(仍用);enforceSourcePoolBudget(legacy,已不在 chat 流程)
-  state-db.js           +sqlite-vec load, +embeddings 表 + CRUD;skipStats/staleLoves(反馈衰减)
+  state-db.js           +sqlite-vec load, +embeddings 表 + CRUD;feedback(含 ncm_id)
+  affinity.js           从 feedback 在线派生 love/artist 亲和度 + 负反馈 + liveTasteBlock(喂 chat + Listen)
   index.js              /api/chat 用 buildChatMessages + repairFamiliarNew;会话方向态;启动 warmup+indexAll
 
 prompts/
