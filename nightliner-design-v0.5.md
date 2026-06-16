@@ -72,8 +72,9 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   │
   5. repairFamiliarNew(align-batch.js)— 确定性对齐,不重试(零延迟)
   │    跨方向的歌换成方向内候选(新→库内),换不到就丢弃(宁短勿偏,queue 可短);
-  │    familiar/new 硬对齐仅在**无方向且非 verbatim** 时执行
-  │    (方向 turn / 「直接放每日推荐」/「第一首放 X」都保留模型选曲与顺序)
+  │    familiar/new 硬对齐在**非 verbatim** 时执行——含方向 turn(2026-06-17 起方向也尊重探索
+  │    档位,用方向内候选拉「全新」)。verbatim(「直接放每日推荐」)整步跳过;
+  │    pinnedFirst(「第一首放 X」)保护 play[0]、其余照常对齐
   │
   6. checkReasonHallucination(budget-enforcer.js)— 启发式,命中 evidence 外细节则遮蔽 reason
   │
