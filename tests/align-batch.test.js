@@ -56,3 +56,36 @@ test('direction turn now aligns familiar/new ratio (swaps to in-direction new)',
   assert.ok(r.repaired >= 1, 'ratio ran under direction');
   assert.ok(plays.some(p => p.title === '新中文'), 'pulled an in-direction new song');
 });
+
+test('pinnedFirst keeps play[0] while aligning the rest', () => {
+  const plays = [
+    { title: 'PINNED', artist: 'p', source_pool: 'wildcard' },   // index 0, not in lib
+    { title: '库A', artist: '甲', source_pool: 'library' },
+    { title: '库B', artist: '乙', source_pool: 'library' },
+  ];
+  const meta = {
+    famTarget: 0, direction: null, pinnedFirst: true,
+    libKeys: new Set([songKey('库A', '甲'), songKey('库B', '乙')]),
+    librarySlice: [], recommendPool: [],
+    explorePool: [{ name: 'NEW1', artist: 'n', ncm_id: 1 }, { name: 'NEW2', artist: 'm', ncm_id: 2 }],
+  };
+  repairFamiliarNew(plays, meta);
+  assert.equal(plays[0].title, 'PINNED', 'pinned head untouched');
+  assert.ok(plays.slice(1).some(p => p.title.startsWith('NEW')), 'the rest still got aligned to new');
+});
+
+test('pinnedFirst protects play[0] even when it is a library song', () => {
+  const plays = [
+    { title: '库A', artist: '甲', source_pool: 'library' }, // pinned, in lib
+    { title: '库B', artist: '乙', source_pool: 'library' },
+    { title: '库C', artist: '丙', source_pool: 'library' },
+  ];
+  const meta = {
+    famTarget: 0, direction: null, pinnedFirst: true,
+    libKeys: new Set([songKey('库A', '甲'), songKey('库B', '乙'), songKey('库C', '丙')]),
+    librarySlice: [], recommendPool: [],
+    explorePool: [{ name: 'NEW1', artist: 'n', ncm_id: 1 }, { name: 'NEW2', artist: 'm', ncm_id: 2 }],
+  };
+  repairFamiliarNew(plays, meta);
+  assert.equal(plays[0].title, '库A', 'library pinned head is NOT swapped out');
+});

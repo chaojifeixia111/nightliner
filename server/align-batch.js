@@ -11,7 +11,7 @@ import { songKey } from './explore-pool.js';
 import { songMatchesDirection } from './direction.js';
 
 export function repairFamiliarNew(plays, meta) {
-  const { famTarget, libKeys, librarySlice = [], explorePool = [], recommendPool = [], direction = null, verbatim = false } = meta || {};
+  const { famTarget, libKeys, librarySlice = [], explorePool = [], recommendPool = [], direction = null, verbatim = false, pinnedFirst = false } = meta || {};
   if (!Array.isArray(plays) || !plays.length || !libKeys || famTarget == null) {
     return { repaired: 0, familiar: 0, before: 0, newCount: plays?.length || 0, offDir: 0 };
   }
@@ -70,18 +70,18 @@ export function repairFamiliarNew(plays, meta) {
   // 才整步跳过、原样保留模型选曲。
   let familiar = plays.filter(inLib).length;
   if (!verbatim) {   // 现在方向 turn 也对齐:用方向内候选拉「全新」,尊重探索档位(不再「方向 turn 失效」)
-    // 库内太多 → 把多出来的库内歌换成全新候选
+    // 库内太多 → 把多出来的库内歌换成全新候选(pinnedFirst 时别动 index 0)
     while (familiar > famTarget && newCands.length) {
-      const idx = plays.findIndex(inLib);
+      const idx = plays.findIndex((p, i) => (!pinnedFirst || i > 0) && inLib(p));
       if (idx < 0) break;
       const c = newCands.shift();
       plays[idx] = mk(c, c.kind === 'deepcut' ? 'wildcard' : 'recommend', reasonNew(c));
       usedKeys.add(songKey(c.title, c.artist));
       familiar--; repaired++;
     }
-    // 库内太少 → 把多出来的全新歌换成库内候选
+    // 库内太少 → 把多出来的全新歌换成库内候选(pinnedFirst 时别动 index 0)
     while (familiar < famTarget && libCands.length) {
-      const idx = plays.findIndex(p => !inLib(p));
+      const idx = plays.findIndex((p, i) => (!pinnedFirst || i > 0) && !inLib(p));
       if (idx < 0) break;
       const c = libCands.shift();
       plays[idx] = mk(c, 'library', '你收藏里的,对齐熟悉比例换上');

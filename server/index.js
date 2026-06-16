@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { buildChatMessages, libraryArtistNames } from './context-builder.js';
 import { repairFamiliarNew } from './align-batch.js';
-import { detectDirection, carriesDirection, isOpenReset, describeDirection, detectVerbatim, isAcknowledgment } from './direction.js';
+import { detectDirection, carriesDirection, isOpenReset, describeDirection, detectVerbatim, isAcknowledgment, detectPinnedFirst } from './direction.js';
 import { callLlm, extractJson, callLlmStream } from './llm-adapter.js';
 import { resolvePlayList, resolveById } from './playback-coordinator.js';
 import { recordFeedback, recordPlay, recordQueue, recordChatTurn, recentChatTurns, recentPlays, antiList, activeCooldowns, feedbackStats } from './state-db.js';
@@ -221,6 +221,8 @@ app.post('/api/chat', async (req, res) => {
 
     const verbatim = detectVerbatim(message); // 「直接放每日推荐」/「第一首放 X」→ 跳过比例换槽
     if (verbatim) console.log('[chat] verbatim 指令 → 跳过 familiar/new 换槽,保住模型选曲与顺序');
+    const pinnedFirst = detectPinnedFirst(message);
+    if (pinnedFirst) console.log('[chat] pinnedFirst 指令 → 保护 play[0],其余按档位对齐');
 
     const recommendPoolP = getRecommendPool(); // 与 RAG 检索并行,buildChatMessages 内部 await
     const { system, messages, meta } = await buildChatMessages({
@@ -232,6 +234,7 @@ app.post('/api/chat', async (req, res) => {
       now,
       direction: currentDirection,
       verbatim,
+      pinnedFirst,
     });
 
     const { say: parsedSay, parsed, status } = await callLlmStream({
