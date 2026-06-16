@@ -5,6 +5,7 @@ import db, { recentPlays, recentFeedback, antiList, activeCooldowns, recentChatT
 import { wrongVibeSongs, negativeKeys, songAffinity, artistAffinity, songWeight, lovedSeeds, liveTasteBlock } from './affinity.js';
 import { retrieveContext } from './retriever.js';
 import { buildExplorePool, songKey } from './explore-pool.js';
+import { buildDiscoveryPool } from './discovery.js';
 import { modeForValue, familiarTarget } from './exploration-modes.js';
 import { songMatchesDirection, describeDirection, directionQuery } from './direction.js';
 
@@ -127,6 +128,9 @@ async function libraryFull() {
   _libraryFullCache = out;
   return out;
 }
+
+const _discoveryCache = new Map(); // focusKey → { ts, pool }
+const DISCOVERY_TTL = 30 * 60 * 1000;
 
 // 曲库里出现过的艺人名(给 direction.js 做「点名艺人」匹配)
 export async function libraryArtistNames() {
@@ -369,13 +373,25 @@ export async function buildChatMessages({
         }
       }
       for (const k of negKeys) excludeKeys.add(k);  // wrong_vibe + cooldown 不进 explore
-      explorePool = await buildExplorePool({
-        seeds, excludeKeys,
-        perSeedCap: direction ? Math.max(mode.perSeedCap, 2) : mode.perSeedCap,
-        limit: 14,
-        deepCutArtists: direction ? Math.max(mode.deepCutArtists, 3) : mode.deepCutArtists,
-      }).catch(e => { console.warn('[explore] pool failed:', e.message); return []; });
-      if (direction) explorePool = explorePool.filter(c => dirMatch(c.name, c.artist));  // 滤掉 simi 漂出方向的
+      const focusKey = direction ? `dir:${directionQuery(direction)}|${mode.value}` : `open:${mode.value}`;
+      const cached = _discoveryCache.get(focusKey);
+      if (cached && Date.now() - cached.ts < DISCOVERY_TTL) {
+        explorePool = cached.pool;
+      } else {
+        explorePool = await buildDiscoveryPool({
+          direction, mode,
+          lovedSeeds: seeds,
+          lovedArtists: [...artistAffinity().values()].sort((a, b) => b.loves - a.loves).slice(0, 3),
+          libKeys, excludeKeys, limit: 24,
+          exploreParams: {
+            perSeedCap: direction ? Math.max(mode.perSeedCap, 2) : mode.perSeedCap,
+            limit: 14,
+            deepCutArtists: direction ? Math.max(mode.deepCutArtists, 3) : mode.deepCutArtists,
+          },
+        }).catch(e => { console.warn('[discovery] failed:', e.message); return []; });
+        if (direction) explorePool = explorePool.filter(c => dirMatch(c.name, c.artist)); // far tier 也按方向过滤
+        _discoveryCache.set(focusKey, { ts: Date.now(), pool: explorePool });
+      }
     }
   }
 

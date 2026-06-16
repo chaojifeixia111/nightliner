@@ -138,7 +138,7 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
 |---|---|---|
 | `library` | RAG 曲库召回 / 方向采样 | 你收藏的歌(网易云快照 + Apple Music MD)。 |
 | `recommend` | 网易云每日 daily + 2×personal_fm | 去重、30min 缓存、每轮 shuffle 取 20。方向激活时按方向过滤。 |
-| `wildcard` | `explore-pool.js` | **simi 近邻 + 同艺人深挖(deepcut)**。多种子并集、丢弃网易云原序、每种子限量、共识加权 + 随机采样。 |
+| `wildcard` | `discovery.js`(→ `explore-pool.js` + far tier) | **near tier**(simi 近邻 + 同艺人深挖,原 explore-pool 逻辑)+ **far tier**(direction 激活时走 playlist-search / open 时走 similar-artists / 大众榜兜底),affinity 加权重排,limit 24;结果按 focusKey(方向+档位)缓存 30min。`context-builder` 替换原 `buildExplorePool` 直调,缓存未过期时零网络。 |
 
 **Agency 原则**(memory: `feedback_agent_agency_recs`):网易云 `/simi/song` 只作**候选生成**,agent 自己去重/过滤/打散/重排,**绝不照搬外部排序**。explore 排除集 = 已收藏 + anti + cooldown + 最近播放 + **wrong_vibe(负反馈)**。
 
@@ -299,7 +299,8 @@ server/
   direction.js          方向检测/匹配/延续(detectDirection, songLang, trackLang, songMatchesDirection, isContinuation)
   exploration-modes.js  5 档命名模式表 + modeForValue + familiarTarget
   align-batch.js        repairFamiliarNew:方向感知 + familiar/new 硬对齐(确定性换槽)
-  explore-pool.js       buildExplorePool:simi 近邻 + 同艺人深挖(agency 层)
+  explore-pool.js       buildExplorePool:simi 近邻 + 同艺人深挖(agency 层,供 discovery.js 的 near tier 内调用)
+  discovery.js          buildDiscoveryPool:near(explore-pool)+ far(playlist-search/similar-artists/charts)两层混合,affinity 重排,30min per-focusKey 缓存
   retriever.js          retrieveContext:多路 sqlite-vec 召回
   indexer.js            chunk + indexSong/Feedback/ChatTurn/MdFile + indexAll*
   embedder.js           BGE-M3(@huggingface/transformers ONNX q8)embed/embedBatch/warmup
