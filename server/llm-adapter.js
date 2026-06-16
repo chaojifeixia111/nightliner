@@ -253,7 +253,7 @@ export function splitSayAndJson(text) {
 // 流式输出 say(逐字)+ 末尾解析 JSON。
 // onSayDelta(deltaText) 仅在 ```` ``` ```` 代码块之前的 prose 区间被调用。
 // 返回 { fullText, say, parsed }。claude 无原生流式 → 退化为一次性调用后整段 emit。
-export async function callLlmStream({ system, messages, model, trigger, onSayDelta }) {
+export async function callLlmStream({ system, messages, model, trigger, onSayDelta, signal }) {
   const t0 = Date.now();
   let fullText = '';
   let error = null;
@@ -264,13 +264,13 @@ export async function callLlmStream({ system, messages, model, trigger, onSayDel
       fullText = await streamOpenAICompatible({
         url: 'https://api.deepseek.com/v1/chat/completions',
         apiKey: requireEnv('DEEPSEEK_API_KEY'),
-        model, system, messages, onToken: t => emitter.push(t),
+        model, system, messages, onToken: t => emitter.push(t), signal,
       });
     } else if (model.startsWith('qwen-')) {
       fullText = await streamOpenAICompatible({
         url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
         apiKey: requireEnv('DASHSCOPE_API_KEY'),
-        model, system, messages, onToken: t => emitter.push(t),
+        model, system, messages, onToken: t => emitter.push(t), signal,
       });
     } else {
       // claude-* 等无流式后端:整段拿回再一次性 emit say
@@ -351,7 +351,7 @@ export function makeSayEmitter(onSayDelta) {
   };
 }
 
-async function streamOpenAICompatible({ url, apiKey, model, system, messages, onToken }) {
+async function streamOpenAICompatible({ url, apiKey, model, system, messages, onToken, signal }) {
   const msgs = [];
   if (system) msgs.push({ role: 'system', content: system });
   msgs.push(...messages);
@@ -360,6 +360,7 @@ async function streamOpenAICompatible({ url, apiKey, model, system, messages, on
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, messages: msgs, temperature: 0.7, max_tokens: 8192, stream: true }),
+    signal,
   });
   if (!r.ok || !r.body) {
     const text = await r.text().catch(() => '<no body>');

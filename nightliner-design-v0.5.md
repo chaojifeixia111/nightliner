@@ -86,6 +86,11 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   9. broadcast: queue / now / dj_stream_end
 ```
 
+**中止本轮(stop)**:ChatInput 在 DJ 工作期间(`busy = thinking || streaming`)把发送钮换成停止钮 → POST /api/chat/stop
+→ index.js 对本轮 `AbortController.abort()`(单用户 `currentChat`,至多一轮在飞;signal 经 callLlmStream 透到 DeepSeek fetch)→ fetch 抛 AbortError →
+catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本轮等于没发生),只 broadcast `thinking=false`
++ `dj_stream_end{stopped:true}` 收尾已吐出的半句气泡。前端乐观收起 thinking,气泡尾部标 "— stopped"。
+
 服务端控制台每轮日志样例:
 ```
 [chat] 方向=中文/国语 · 女声
@@ -217,6 +222,7 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
 
 ```
 POST /api/chat               用户输入(异步,结果走 WS 流)
+POST /api/chat/stop          手动中止正在生成的本轮 DJ 回复(中断 LLM 流,不提交队列/反馈/记忆)
 GET  /api/now                当前 now-playing
 GET  /api/queue              当前 queue
 GET  /api/tuning             读调音台
@@ -257,8 +263,8 @@ WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `
 | `HeroCard.vue` | 封面 / 歌名 / 进度 / `<audio>` 控制（**播放/暂停图标完全由 `<audio>` 的 play/pause 事件回写,不手动翻转——刷新后被拦截的 autoplay / OS 媒体键都能正确同步;空格键 = 暂停/播放,文本框内不拦截**)/ **音量持久化(localStorage `nl_volume`,默认 33)** / ❤ 常驻 + hover 出 × 反馈面板 / **队列入口(list 图标 → QueueDrawer)** |
 | `TuningDrawer.vue` | **调音台**:探索档位(5 档吸附滑块,显示英文名)/ Queue 长度 |
 | `QueueDrawer.vue` | queue 预览 + CLEAR 清空待播(只在有待播歌时显示);每行 hover 出 × 单独移除待播歌,正在播的那首不可删 |
-| `ChatInput.vue` | 底部常驻输入 + **搜索入口(左侧放大镜 → 把输入框已打的字直接带进搜索整页并搜出;空则开空搜索)** |
-| `DJLog.vue` | DJ 流式气泡(逐字)+ 系统消息 |
+| `ChatInput.vue` | 底部常驻输入 + **搜索入口(左侧放大镜 → 把输入框已打的字直接带进搜索整页并搜出;空则开空搜索)** + **DJ 工作期间发送钮变停止钮(`@stop` → POST /api/chat/stop)** |
+| `DJLog.vue` | DJ 流式气泡(逐字)+ 系统消息;**被中止的半句标 "— stopped"** |
 | `AppHeader.vue` | masthead:wordmark + ON AIR(播放时)+ **▦ Listen 入口** + **TUNING**(2026-06:搜索移入输入栏、队列移入播放栏,刊头只剩这两个;窄屏 ON AIR 退化为呼吸金点) |
 | `ListenPage.vue` | **Listen 整页**:6 张「点即播」卡(Today's Picks + Comfort/Cozy/Balanced/Venture/Wild)→ `POST /api/listen` 生成开播;Esc/✕ 关闭 |
 | `PlaylistCard.vue` | **统一标牌封面**:墨底 + 衬线英文标题 + 金色标记(只英文标题、无描述);`kind=level` = 金色刻度(填充 = 探索度,Comfort→Wild 淡暖递增)/ `kind=daily` = 整宽金线 + 日期 |

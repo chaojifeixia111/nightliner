@@ -175,6 +175,9 @@ app.post('/api/tuning', (req, res) => {
   res.json({ ok: true, tuning });
 });
 
+// 正在生成的本轮 DJ 回复(单用户 → 至多一轮在飞)。stop 端点据此中断 LLM 流。
+let currentChat = null;
+
 // POST /api/chat
 app.post('/api/chat', async (req, res) => {
   const { message } = req.body;
@@ -182,6 +185,10 @@ app.post('/api/chat', async (req, res) => {
 
   res.json({ ok: true, status: 'thinking' });
   broadcast({ type: 'thinking', data: true });
+
+  // 本轮的中止句柄:/api/chat/stop 调 ac.abort() 会让下游 DeepSeek fetch 抛 AbortError
+  const ac = new AbortController();
+  currentChat = { ac };
 
   const ts = new Date().toISOString();
   const streamId = `s${Date.now()}`;
@@ -228,7 +235,7 @@ app.post('/api/chat', async (req, res) => {
     });
 
     const { say: parsedSay, parsed, status } = await callLlmStream({
-      system, messages, model: config.models.chat_mode, trigger: 'chat', onSayDelta,
+      system, messages, model: config.models.chat_mode, trigger: 'chat', onSayDelta, signal: ac.signal,
     });
 
     // status=failed → 容错修复 + json_object 重问都没救回来。别再静默当 chat 丢弃(那会污染
@@ -387,12 +394,32 @@ app.post('/api/chat', async (req, res) => {
     });
 
   } catch (e) {
-    console.error('chat error:', e);
-    broadcast({ type: 'thinking', data: false });
-    // 若已开了流式气泡,先收尾,避免前端留一个永远在打字的空泡
-    if (streamStarted) broadcast({ type: 'dj_stream_end', data: { id: streamId, say: streamedSay.trim() } });
-    broadcast({ type: 'dj_message', data: { ts: new Date().toISOString(), kind: 'system', text: '出错了:' + e.message } });
+    if (ac.signal.aborted) {
+      // 用户手动停止本轮:不是错误。中断 LLM,不提交任何队列/反馈/记忆(本轮等于没发生)。
+      // 只把流式气泡收尾(带 stopped 标记),保留已经吐出的半句话。
+      broadcast({ type: 'thinking', data: false });
+      if (streamStarted) broadcast({ type: 'dj_stream_end', data: { id: streamId, say: streamedSay.trim(), stopped: true } });
+      console.log('[chat] 用户停止本轮生成 → 未提交任何动作');
+    } else {
+      console.error('chat error:', e);
+      broadcast({ type: 'thinking', data: false });
+      // 若已开了流式气泡,先收尾,避免前端留一个永远在打字的空泡
+      if (streamStarted) broadcast({ type: 'dj_stream_end', data: { id: streamId, say: streamedSay.trim() } });
+      broadcast({ type: 'dj_message', data: { ts: new Date().toISOString(), kind: 'system', text: '出错了:' + e.message } });
+    }
+  } finally {
+    currentChat = null;
   }
+});
+
+// POST /api/chat/stop — 手动中止正在生成的本轮 DJ 回复(中断 LLM 流,不提交队列/反馈/记忆)
+app.post('/api/chat/stop', (req, res) => {
+  if (currentChat) {
+    currentChat.ac.abort();
+    console.log('[chat] 收到停止请求 → 中断本轮生成');
+    return res.json({ ok: true, stopped: true });
+  }
+  res.json({ ok: true, stopped: false });
 });
 
 // GET /api/now

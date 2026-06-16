@@ -12,7 +12,10 @@
       @focus="focused = true"
       @blur="focused = false"
     />
-    <button type="submit" class="send-btn" :disabled="!text.trim() || busy" aria-label="Send">
+    <button v-if="busy" type="button" class="stop-btn" @click="$emit('stop')" aria-label="Stop">
+      <Icon name="square" :size="12" />
+    </button>
+    <button v-else type="submit" class="send-btn" :disabled="!text.trim()" aria-label="Send">
       <Icon name="arrow-up" :size="15" />
     </button>
   </form>
@@ -27,7 +30,7 @@ const text = ref('');
 const focused = ref(false);
 const placeholder = ref('');
 const inputEl = ref(null);
-const emit = defineEmits(['send', 'command', 'open-search']);
+const emit = defineEmits(['send', 'command', 'open-search', 'stop']);
 const props = defineProps({ busy: Boolean });
 
 onMounted(() => {
@@ -112,4 +115,19 @@ input::placeholder { color: var(--paper-4); }
 }
 .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .send-btn:hover:not(:disabled) { background: var(--gold); color: var(--ink-0); }
+.stop-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--paper-4);
+  background: transparent;
+  color: var(--paper-3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
+}
+.stop-btn:hover { border-color: var(--paper-1); color: var(--paper-0); }
 </style>

@@ -17,7 +17,7 @@
     <div class="djlog-wrap">
       <DJLog :messages="djMessages" :thinking="thinking" :stats="lastStats" :streaming-id="streamingId" />
     </div>
-    <ChatInput :busy="thinking" @send="onChat" @command="onCommand" @open-search="openDiscover('search', $event)" />
+    <ChatInput :busy="busy" @send="onChat" @command="onCommand" @stop="onStop" @open-search="openDiscover('search', $event)" />
     <TuningDrawer
       :open="tuningOpen"
       :tuning="state.tuning"
@@ -42,7 +42,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import AppHeader from './components/AppHeader.vue';
 import HeroCard from './components/HeroCard.vue';
 import DJLog from './components/DJLog.vue';
@@ -71,6 +71,8 @@ const playing = ref(false);
 const djMessages = ref([]);
 const lastStats = ref(null);
 const streamingId = ref(null);
+// DJ 在干活 = 正在选歌(thinking)或正在流式吐字(streamingId)。停止按钮整段都该在。
+const busy = computed(() => thinking.value || streamingId.value !== null);
 
 const state = reactive({
   now: null,
@@ -106,13 +108,15 @@ function appendStream({ id, delta }) {
     pushDjMessage({ ts: new Date().toISOString(), kind: 'stream', id, text: delta });
   }
 }
-function endStream({ id, say }) {
+function endStream({ id, say, stopped }) {
   const m = djMessages.value.find(x => x.id === id);
   if (m) {
     if (say) m.text = say; // 用服务端的权威 say 收尾(去掉流式尾部杂质)
-    else if (!m.text) {
+    if (!m.text) {
       const idx = djMessages.value.findIndex(x => x.id === id);
       if (idx >= 0) djMessages.value.splice(idx, 1); // 空 say → 丢掉占位泡
+    } else if (stopped) {
+      m.stopped = true; // 半句被用户打断 → 渲染时标个"— stopped"
     }
   }
   if (streamingId.value === id) streamingId.value = null;
@@ -160,6 +164,13 @@ function onChat(text) {
     thinking.value = false;
     pushDjMessage({ ts: new Date().toISOString(), kind: 'system', text: 'Send failed — is the backend running?' });
   });
+}
+
+// 手动停止本轮 DJ 生成:让后端中断 LLM 流(后端随后广播 thinking=false + dj_stream_end[stopped])。
+// 乐观地立刻收起 thinking,按钮即时回到发送态,不必等中断在网络上往返。
+function onStop() {
+  thinking.value = false;
+  fetch('/api/chat/stop', { method: 'POST' }).catch(() => {});
 }
 
 function onSkip() {

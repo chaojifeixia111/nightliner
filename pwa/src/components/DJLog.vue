@@ -22,7 +22,7 @@
           </template>
           <template v-else-if="msg.kind === 'opening' || msg.kind === 'chat_reply'">{{ displayText(i, msg) }}</template>
           <template v-else-if="msg.kind === 'user'">{{ msg.text }}</template>
-          <template v-else-if="msg.kind === 'stream'">{{ msg.text }}<span v-if="msg.id === streamingId" class="stream-caret">▍</span></template>
+          <template v-else-if="msg.kind === 'stream'">{{ msg.text }}<span v-if="msg.id === streamingId" class="stream-caret">▍</span><span v-if="msg.stopped" class="stopped-tag"> — stopped</span></template>
           <template v-else-if="msg.kind === 'reaction'">
             <span class="reaction-text">reacted: {{ msg.text }}</span>
           </template>
@@ -250,6 +250,7 @@ function bodyClass(msg) {
 .song-prefix { color: var(--paper-0); font-weight: 500; }
 .chat-reply-body, .stream-body { color: var(--paper-1); }
 .stream-caret { color: var(--gold); margin-left: 1px; animation: caretBlink 1s steps(1) infinite; }
+.stopped-tag { font-family: var(--font-mono); font-size: 11px; color: var(--paper-4); font-style: normal; }
 @keyframes caretBlink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
 .warn-text { color: var(--negative); font-family: var(--font-mono); font-size: 12px; }
 .empty { font-size: 13px; color: var(--paper-4); padding: 4px 0; font-family: var(--font-sans); }
