@@ -64,12 +64,12 @@ export function repairFamiliarNew(plays, meta) {
     plays.splice(0, plays.length, ...kept);  // 原地替换内容,保持调用方的数组引用
   }
 
-  // ── 第二步:familiar↔new 比例硬对齐 —— **仅在「无方向」的开放推荐时执行**。
-  // 有方向时:模型的方向内选曲已证明可靠,一律保留,不为凑库内/全新比例换掉它们,
-  // 也保留顺序(让「第一首放 X」生效)。此时比例只由 prompt + 候选池软引导。
-  // verbatim(「直接放每日推荐」/「第一首放 X」)同理跳过换槽,保住模型选曲与顺序。
+  // ── 第二步:familiar↔new 比例硬对齐 —— **有方向时也执行**(2026-06-17 起)。
+  // 用方向内候选(newCands/libCands 已按 matchesDir 过滤)拉「全新」,尊重探索档位,
+  // 不再「方向 turn 比例失效」;绝不跨方向。只有 verbatim(「直接/原样放每日推荐」)
+  // 才整步跳过、原样保留模型选曲。
   let familiar = plays.filter(inLib).length;
-  if (!direction && !verbatim) {
+  if (!verbatim) {   // 现在方向 turn 也对齐:用方向内候选拉「全新」,尊重探索档位(不再「方向 turn 失效」)
     // 库内太多 → 把多出来的库内歌换成全新候选
     while (familiar > famTarget && newCands.length) {
       const idx = plays.findIndex(inLib);
