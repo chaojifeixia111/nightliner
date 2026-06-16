@@ -1,6 +1,6 @@
 <template>
   <div v-if="show" class="thinking">
-    <span class="label">Picking the next one…</span>
+    <span class="label">Thinking</span>
     <span class="dots">
       <span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>
     </span>
