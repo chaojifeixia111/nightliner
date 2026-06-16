@@ -39,3 +39,35 @@ test('affinity reranks loved songs up (deterministic rng)', () => {
   const out = blendDiscovery({ near: [], far, mode: mode(100), limit: 3, songAff, artistAff: emptyAff, rng: () => 0.5 });
   assert.equal(out[0].name, 'F3', 'loved far song ranks first');
 });
+
+import { buildFarTier } from '../server/discovery.js';
+
+// fake ncm dependency object
+function fakeNcm(over = {}) {
+  return {
+    searchPlaylists: async () => ({ result: { playlists: [{ id: 1, name: 'pl', playCount: 9 }] } }),
+    playlistTrackAll: async () => ({ songs: [{ name: 'PlSong', ar: [{ name: 'PlArtist' }], id: 11 }] }),
+    searchArtists: async () => ({ result: { artists: [{ id: 7, name: 'A' }] } }),
+    simiArtist: async () => ({ artists: [{ id: 8, name: 'SimA' }] }),
+    artistTopSongs: async () => ({ songs: [{ name: 'TopSong', ar: [{ name: 'SimA' }], id: 22 }] }),
+    toplist: async () => ({ list: [] }),
+    ...over,
+  };
+}
+
+test('buildFarTier(direction) pulls playlist tracks', async () => {
+  const dir = { langMatch: 'chinese', gender: null, artists: [], raw: '千禧华语' };
+  const far = await buildFarTier({ direction: dir, lovedArtists: [] }, fakeNcm());
+  assert.ok(far.some(c => c.name === 'PlSong'), 'playlist track present');
+});
+
+test('buildFarTier(open) uses similar-artists of loved', async () => {
+  const far = await buildFarTier({ direction: null, lovedArtists: [{ name: 'A' }] }, fakeNcm());
+  assert.ok(far.some(c => c.name === 'TopSong'), 'similar-artist top song present');
+});
+
+test('buildFarTier swallows NetEase failures (returns array)', async () => {
+  const far = await buildFarTier({ direction: null, lovedArtists: [{ name: 'A' }] },
+    fakeNcm({ searchArtists: async () => { throw new Error('502'); } }));
+  assert.ok(Array.isArray(far));
+});
