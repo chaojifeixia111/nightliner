@@ -96,3 +96,18 @@ export async function artistTopSongs(id) {
 export async function personalFm() {
   return ncmRequest('/personal_fm');
 }
+
+// 歌单搜索(cloudsearch type=1000 → result.playlists)—— 题材/年代/语种发现的主力
+export async function searchPlaylists(keywords, { limit = 8 } = {}) {
+  return ncmRequest('/cloudsearch', { keywords, limit, type: 1000 });
+}
+
+// 相似艺人(/simi/artist → artists)—— 从「你爱的艺人」横向扩到「像他的艺人」
+export async function simiArtist(id) {
+  return ncmRequest('/simi/artist', { id });
+}
+
+// 排行榜列表(/toplist → list,每个是一张歌单 id,可再 playlistTrackAll 取曲)
+export async function toplist() {
+  return ncmRequest('/toplist');
+}
