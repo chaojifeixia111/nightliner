@@ -117,6 +117,7 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
 - `familiarTarget(mode, n) = round(lib/100 × n)`,其余为「全新」。
 - **硬对齐**:`repairFamiliarNew` 不信模型自报的 `source_pool`,用真实曲库 `libKeys` 判定每首库内/全新,确定性多退少补(从手边候选池换槽,**不重试**)。这取代了 v0.5-early 的 `enforceSourcePoolBudget`+retry。
 - **verbatim 例外**:`detectVerbatim(message)`(「直接/原样/按顺序 放每日推荐」或「第一首放/要/是 X」)置 `meta.verbatim`,跳过比例换槽,保住模型选曲与顺序——显式摆放指令下 Agency 让位于"照办"。仍服从方向硬约束与 anti/cooldown。
+- **pinnedFirst(与 verbatim 不同)**:`detectPinnedFirst(message)`(「第一首放/听 X」)置 `meta.pinnedFirst`,保护 `play[0]`(点名的那首保持队首),其余歌**仍服从档位比例换槽**(这是与 verbatim 的关键区别:verbatim 跳过换槽,pinnedFirst 不跳过)。若 `play[0]` 无法解析出可播 URL,向用户发一条系统提示而非静默丢弃。chat 队列整体打散(`arrangeQueue`),pinnedFirst 时只保住队首。
 
 ### 3.2 方向硬约束(优先级高于档位)— `server/direction.js`
 
@@ -128,7 +129,7 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
   - **兜底仍保护**:未知艺人走 `songLang`,latin 标题 → english,**即使艺人含中文**——"Sad Sometimes"(黄霄雲 EDM)仍排除出"国语"。`ARTIST_LANG` 只收**确定是韩/日**的艺人,不放中/英艺人,以免污染其它方向。新增韩/日艺人往该表加(key 用 `norm()` 形式)。
 - **会话延续**:`currentDirection` 存在 index.js,4 分支判定——①新方向覆盖;②明确"随便/都行/放开"清空(`isOpenReset`);③纠正/追问("怎么又是X""第一首不是说放Y吗")与续批("下一批/继续")沿用上轮方向(`carriesDirection`);④其余全新请求清空(防方向卡死在旧请求上)。
 - **取数**:RAG 用方向词检索(而非空查询"下一批");库内从**全量收藏按方向随机采样**(每次不同 → 缓解"老推同几首");recommend / explore 池都按方向过滤;explore 种子取方向内收藏曲(→ simi 近邻 + 同艺人深挖天然在方向内)。
-- **宁短勿偏**(2026-06,取代早期"比例让位"):跑偏方向的歌优先换成方向内候选(新→库内),候选枯竭则**直接丢弃**——queue 可以短,**绝不用跨方向歌凑满,绝不谎报语种**。方向 turn 不再硬对齐 familiar/new 比例(保留模型选曲与顺序,让"第一首放 X"生效),档位目标仅作 prompt 软引导。
+- **宁短勿偏**(2026-06,取代早期"比例让位"):跑偏方向的歌优先换成方向内候选(新→库内),候选枯竭则**直接丢弃**——queue 可以短,**绝不用跨方向歌凑满,绝不谎报语种**。方向 turn **仍服从档位 familiar/new 换槽**(2026-06-17:取消了"方向 turn 不再硬对齐"例外,统一走 `repairFamiliarNew`)。chat 推荐队列落盘前经 `arrangeQueue` 打散(避免「前面全是听过的」),pinnedFirst 时只保住队首。
 - **server 只保证语种**(艺人语种表 + 脚本兜底);**性别 / 风格交给 LLM**(歌名/艺人名无法可靠判定性别)。一首韩语男声(태양 / CNBLUE / BIGBANG)可能进到"女声"候选池里、由 LLM 终筛掉——可接受,跨语种乱入已根治。
 - 详见 memory: `project_direction_hard_constraint.md`。
 

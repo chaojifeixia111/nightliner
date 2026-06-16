@@ -16,7 +16,7 @@ import { warmup } from './embedder.js';
 import { indexAllSongs, indexAllFeedback, indexAllChatTurns, indexMdFile } from './indexer.js';
 import { checkReasonHallucination } from './budget-enforcer.js';
 import { normalizeSearchSongs, normalizeSearchArtists, normalizeArtistSongs } from './search-normalize.js';
-import { playNow, enqueue, clearUpcoming, removeFromQueue, sameSong, applyChatRecommendation } from './queue-ops.js';
+import { playNow, enqueue, clearUpcoming, removeFromQueue, sameSong, applyChatRecommendation, arrangeQueue } from './queue-ops.js';
 import { buildPlaylist, plKey } from './playlist-builder.js';
 import { buildExplorePool, songKey } from './explore-pool.js';
 import { songAffinity, artistAffinity, songWeight, lovedSeeds, graduatedLibrary, negativeSongs } from './affinity.js';
@@ -299,6 +299,18 @@ app.post('/api/chat', async (req, res) => {
       const resolved = await resolvePlayList(plays);
       const playable = resolved.filter(s => s.found);
 
+      // 显式点名的第一首没解析出来(常是网易云瞬时 502)→ 别静默丢,告诉用户
+      if (pinnedFirst && plays.length) {
+        const want = plays[0];
+        const got = playable.some(s => s.title === want.title);
+        if (!got) {
+          broadcast({ type: 'dj_message', data: { ts, kind: 'system',
+            text: `「${want.title}」这次没找到能播的版本(可能网络抖动),其余照常。` } });
+          console.warn(`[chat] pinnedFirst "${want.title}" 未能解析,已提示用户`);
+        }
+      }
+      const arranged = arrangeQueue(playable, { pinnedFirst });
+
       // Compute hit stats
       const snapshotNorm = await getSnapshotNorm();
       let library_hits = 0;
@@ -312,7 +324,7 @@ app.post('/api/chat', async (req, res) => {
       }
       console.log(`[chat] queueAction=${parsed.queueAction}, library_hits=${library_hits}/${plays.length}`);
 
-      const applied = applyChatRecommendation(currentQueue, now, playable, parsed.queueAction);
+      const applied = applyChatRecommendation(currentQueue, now, arranged, parsed.queueAction);
       currentQueue = applied.queue;
       now = applied.now;
 

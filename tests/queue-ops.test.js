@@ -1,7 +1,7 @@
 // tests/queue-ops.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sameSong, playNow, enqueue, clearUpcoming, removeFromQueue, applyChatRecommendation } from '../server/queue-ops.js';
+import { sameSong, playNow, enqueue, clearUpcoming, removeFromQueue, applyChatRecommendation, arrangeQueue } from '../server/queue-ops.js';
 
 const s = (over) => ({ title: 't', artist: 'a', ncm_id: 1, url: 'u', ...over });
 
@@ -130,4 +130,18 @@ test('applyChatRecommendation: 不修改入参队列(纯函数)', () => {
   const q = [s({ ncm_id: 1 })];
   applyChatRecommendation(q, q[0], [s({ ncm_id: 2 })], 'insert_next');
   assert.equal(q.length, 1);
+});
+
+test('arrangeQueue shuffles but keeps the pinned song first', () => {
+  const q = [];
+  for (let i = 0; i < 8; i++) q.push(s({ ncm_id: i, title: 'T' + i }));
+  const out = arrangeQueue(q, { pinnedFirst: true, rng: () => 0 });
+  assert.equal(out[0].ncm_id, 0, 'pinned (first) song stays at front');
+  assert.equal(out.length, 8);
+});
+test('arrangeQueue without pinnedFirst shuffles all (pure, no input mutation)', () => {
+  const q = [s({ ncm_id: 1 }), s({ ncm_id: 2 }), s({ ncm_id: 3 })];
+  const out = arrangeQueue(q, { pinnedFirst: false, rng: () => 0 });
+  assert.equal(out.length, 3);
+  assert.equal(q.length, 3); // input untouched
 });
