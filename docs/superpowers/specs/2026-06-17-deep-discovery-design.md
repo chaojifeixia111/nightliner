@@ -38,8 +38,8 @@ A `venture` (75) request for "千禧年华语" returned 10 library songs and 1 n
 
 - **Near tier** (low dial — close to your taste): reuse the existing `buildExplorePool` (simi/song of loved songs + same-artist deep-cut). Already works; not duplicated.
 - **Far tier** (high dial — bold, NEW): the new sources —
-  - **Direction turn:** `searchPlaylists(directionKeyword)` → take top N curated playlists by playCount → `playlistTrackAll` → tracks. Plus genre `toplist`s relevant to the direction.
-  - **Open turn:** `simiArtist(id)` of your top loved artists (resolve names→ids via `searchArtists`, capped at ~3) → their `artistTopSongs`; plus new/hot `toplist`s. (No keyword playlist-search without a named genre.)
+  - **Direction turn:** `searchPlaylists(directionKeyword)` → take top N curated playlists by playCount → `playlistTrackAll` → tracks. Plus genre `toplist`s relevant to the direction. *(deferred — playlist-search + similar-artists ship first; charts is a later booster)*
+  - **Open turn:** `simiArtist(id)` of your top loved artists (resolve names→ids via `searchArtists`, capped at ~3) → their `artistTopSongs`; plus new/hot `toplist`s. *(deferred — playlist-search + similar-artists ship first; charts is a later booster)* (No keyword playlist-search without a named genre.)
 
 **Blend:** `farFraction = mode.value / 100` (Comfort 0% far → Wild 65%+ far, matching the existing wildcard ratios). The pool is `near*(1-farFraction) + far*farFraction`, sized to `limit` (~24).
 

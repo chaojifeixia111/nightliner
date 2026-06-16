@@ -107,6 +107,7 @@ export async function simiArtist(id) {
   return ncmRequest('/simi/artist', { id });
 }
 
+// reserved for a future "charts" discovery booster — not yet wired into discovery.buildFarTier
 // 排行榜列表(/toplist → list,每个是一张歌单 id,可再 playlistTrackAll 取曲)
 export async function toplist() {
   return ncmRequest('/toplist');

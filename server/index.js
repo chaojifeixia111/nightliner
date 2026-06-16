@@ -297,16 +297,23 @@ app.post('/api/chat', async (req, res) => {
       }
 
       const resolved = await resolvePlayList(plays);
-      const playable = resolved.filter(s => s.found);
+      let playable = resolved.filter(s => s.found);
 
-      // 显式点名的第一首没解析出来(常是网易云瞬时 502)→ 别静默丢,告诉用户
+      // 显式点名的第一首没解析出来(常是网易云瞬时 502)→ 先重试一次同样的解析路径,
+      // 仍失败才提示用户(别静默丢)。重试成功就放回队首。
       if (pinnedFirst && plays.length) {
         const want = plays[0];
-        const got = playable.some(s => s.title === want.title);
-        if (!got) {
-          broadcast({ type: 'dj_message', data: { ts, kind: 'system',
-            text: `「${want.title}」这次没找到能播的版本(可能网络抖动),其余照常。` } });
-          console.warn(`[chat] pinnedFirst "${want.title}" 未能解析,已提示用户`);
+        if (!playable.some(s => s.title === want.title)) {
+          const retry = await resolvePlayList([want]).catch(() => []);
+          const got = retry.find(s => s.found);
+          if (got) {
+            playable = [got, ...playable];
+            console.log(`[chat] pinnedFirst "${want.title}" 重试解析成功,放回队首`);
+          } else {
+            broadcast({ type: 'dj_message', data: { ts, kind: 'system',
+              text: `「${want.title}」这次没找到能播的版本(可能网络抖动),其余照常。` } });
+            console.warn(`[chat] pinnedFirst "${want.title}" 重试后仍未解析,已提示用户`);
+          }
         }
       }
       const arranged = arrangeQueue(playable, { pinnedFirst });
@@ -334,9 +341,9 @@ app.post('/api/chat', async (req, res) => {
         broadcast({ type: 'now', data: now });
 
         // DJ opening 已通过 dj_stream_* 流式给到前端,这里不再重复广播
-        // Per-song reasons
-        for (let i = 0; i < playable.length; i++) {
-          const s = playable[i];
+        // Per-song reasons — iterate arranged so card order matches actual queue order
+        for (let i = 0; i < arranged.length; i++) {
+          const s = arranged[i];
           const reason = s.reason || '';
           if (reason) {
             broadcast({ type: 'dj_message', data: { ts, kind: 'song', title: s.title, text: reason } });

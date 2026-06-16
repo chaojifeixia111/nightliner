@@ -116,8 +116,8 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
 
 - `familiarTarget(mode, n) = round(lib/100 × n)`,其余为「全新」。
 - **硬对齐**:`repairFamiliarNew` 不信模型自报的 `source_pool`,用真实曲库 `libKeys` 判定每首库内/全新,确定性多退少补(从手边候选池换槽,**不重试**)。这取代了 v0.5-early 的 `enforceSourcePoolBudget`+retry。
-- **verbatim 例外**:`detectVerbatim(message)`(「直接/原样/按顺序 放每日推荐」或「第一首放/要/是 X」)置 `meta.verbatim`,跳过比例换槽,保住模型选曲与顺序——显式摆放指令下 Agency 让位于"照办"。仍服从方向硬约束与 anti/cooldown。
-- **pinnedFirst(与 verbatim 不同)**:`detectPinnedFirst(message)`(「第一首放/听 X」)置 `meta.pinnedFirst`,保护 `play[0]`(点名的那首保持队首),其余歌**仍服从档位比例换槽**(这是与 verbatim 的关键区别:verbatim 跳过换槽,pinnedFirst 不跳过)。若 `play[0]` 无法解析出可播 URL,向用户发一条系统提示而非静默丢弃。chat 队列整体打散(`arrangeQueue`),pinnedFirst 时只保住队首。
+- **verbatim 例外**:`detectVerbatim(message)`(「直接/原样/按顺序 放每日推荐」)置 `meta.verbatim`,跳过比例换槽,保住模型选曲与顺序——显式摆放指令下 Agency 让位于"照办"。仍服从方向硬约束与 anti/cooldown。
+- **pinnedFirst(与 verbatim 不同)**:`detectPinnedFirst(message)`(「第一首放/听 X」)置 `meta.pinnedFirst`,保护 `play[0]`(点名的那首保持队首),其余歌**仍服从档位比例换槽**(这是与 verbatim 的关键区别:verbatim 跳过换槽,pinnedFirst 不跳过)。若 `play[0]` 无法解析出可播 URL,先重试一次解析路径,仍失败才向用户发系统提示而非静默丢弃。chat 队列整体打散(`arrangeQueue`),pinnedFirst 时只保住队首。
 
 ### 3.2 方向硬约束(优先级高于档位)— `server/direction.js`
 
