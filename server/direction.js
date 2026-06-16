@@ -106,15 +106,17 @@ export function isAcknowledgment(message) {
 
 // 显式 verbatim 指令:用户要「就这么放」而不是让 agent 再策展/换槽。
 //  - 「直接/原样/按顺序…放每日推荐」:跳过熟悉↔全新比例换槽(仍服从方向硬约束)。
-//  - 「第一首放/要/是 X」:固定头部,跳过换槽以保住顺序(模型已把 X 放第一)。
 // 默认不命中 —— 普通「放点每日推荐」仍走 agent 策展(Agency 原则)。
 const VERBATIM_CUE = /(直接|原样|按顺序|按原顺序|原封|完整|别筛|别动|照着|照原)/;
-const PIN_FIRST = /第一首\s*(放|要|是|来|播|给|用|先|得|换成)/;
 export function detectVerbatim(message) {
   const m = message || '';
-  if (PIN_FIRST.test(m)) return true;
-  if (/每日推荐/.test(m) && VERBATIM_CUE.test(m)) return true;
-  return false;
+  return /每日推荐/.test(m) && VERBATIM_CUE.test(m);
+}
+
+// 点名头部:"第一首(歌/我要)?(放|要|是|听|来|播…) X" —— 容忍中间的「歌/我/我要」等字。
+const PIN_FIRST = /第一首[歌曲]?\s*(我?要听|我要|放|要|是|听|来|播|给|用|先|得|换成)/;
+export function detectPinnedFirst(message) {
+  return PIN_FIRST.test(message || '');
 }
 
 /**
