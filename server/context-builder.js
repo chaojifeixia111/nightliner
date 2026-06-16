@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import db, { recentPlays, recentFeedback, antiList, activeCooldowns, recentChatTurns } from './state-db.js';
 import { wrongVibeSongs, negativeKeys, songAffinity, artistAffinity, songWeight, lovedSeeds, liveTasteBlock } from './affinity.js';
 import { retrieveContext } from './retriever.js';
-import { buildExplorePool, songKey } from './explore-pool.js';
+import { songKey } from './explore-pool.js';
 import { buildDiscoveryPool } from './discovery.js';
 import { modeForValue, familiarTarget } from './exploration-modes.js';
 import { songMatchesDirection, describeDirection, directionQuery } from './direction.js';
