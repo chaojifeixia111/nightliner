@@ -189,10 +189,10 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
 
 1. `cloudsearch("title artist", limit 5)`。
 2. `pickBest`:**只取原唱**——默认滤掉变体(remix/cover/live/伴奏/纯音乐…);先「歌名+艺人精确」匹配,再「剥后缀名+艺人」匹配;找不到原唱则**丢弃**(`[playback] no original version found`)。用户主动要变体(标题自带 remix/live)时才放行变体。
-3. `song/url/v1`(`level=exhigh` 320k)。无 URL(VIP `fee=1` / 区域 / 无原唱)→ 丢弃(`found=false`),不进 queue。
+3. `song/url/v1`(`level=exhigh` 320k)。无 URL → 丢弃(`found=false`),不进 queue。**账号是 VIP(`vipType:11`)**,所以 VIP 专享(`fee:1`)的歌能正常取到直链,**不是**掉队原因;真正取不到的是:下架(`code:404`,如周杰伦整库被网易云下架)、区域限制、或 `pickBest` 滤掉变体后只剩翻唱。
 4. 并行解析,顺序与 `play[]` 对齐。
 
-**已知取舍**:部分 VIP 独享 / 仅有翻唱的歌会掉队。这是当前已知、未优先处理的缺口。
+**已知取舍**:下架 / 区域限制 / 仅有翻唱的歌会掉队。这是当前已知、未优先处理的缺口。
 
 **按 id 取直链(`resolveById`,SEARCH 结果点播 / Listen 歌单用)**:前端/引擎带确定的 `ncm_id` → 跳过搜索,直接 `song/url/v1` 取直链 + `song/detail` 补封面/时长。无直链(VIP/无版权)→ `reason:'unplayable'`;瞬时网络 / NCM 5xx → `reason:'error'`(前端文案区分"放弃"和"重试")。没带 `ncm_id` 时降级走 `resolvePlayList`。
 
