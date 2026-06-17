@@ -196,6 +196,12 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
 
 **按 id 取直链(`resolveById`,SEARCH 结果点播 / Listen 歌单用)**:前端/引擎带确定的 `ncm_id` → 跳过搜索,直接 `song/url/v1` 取直链 + `song/detail` 补封面/时长。无直链(VIP/无版权)→ `reason:'unplayable'`;瞬时网络 / NCM 5xx → `reason:'error'`(前端文案区分"放弃"和"重试")。没带 `ncm_id` 时降级走 `resolvePlayList`。
 
+**直链时效与按需重解析**:`song/url/v1` 返回的直链是 **token 时效,约 20min 失效**(响应里 `expi:1200` 秒)。而一次 chat/推荐是整批解析、缓存进内存 `currentQueue`,`skip`/`play-event` 推进队列与刷新重连都**只发缓存**、不重解析 —— 队列里等久了或刷新后的歌,直链早过期,表现为「播到一半卡死(像断网)」「刷新后封面在、点播放/下一首没反应」。修法是**播放层按需重解析**,不在 advance 时预解析(免得每次切歌都加一次网络往返):
+
+- 服务端 `POST /api/resolve { ncm_id, title, artist }` → 复用 `resolveById` 取新鲜直链,回 `{ found, url?, reason? }`。
+- 前端 `<audio>` `@error`(直链 403/失效最常见)→ 调 `/api/resolve` 换新链续播,**尽量从中断位置恢复**;**每首至多重解析一次**(避免对真·慢 CDN 反复重启缓冲)。结果分流:`found` → 无感续播;`unplayable` → 提示并 `skip`;`error`(网络/NCM 瞬时)→ **只提示不跳**(否则 NCM 一挂整列会被连环跳光,让用户手动重试)。
+- 另有长卡顿看门狗:`waiting/stalled` 且零进度超 15s(过期常表现为挂死而非 error)→ 同样重解析一次。
+
 ---
 
 ## 六、状态与存储

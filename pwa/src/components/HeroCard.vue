@@ -88,13 +88,14 @@
       @timeupdate="onTimeUpdate"
       @loadedmetadata="onMeta"
       @seeking="startBuffering"
-      @waiting="startBuffering"
-      @stalled="startBuffering"
+      @waiting="onWaiting"
+      @stalled="onWaiting"
       @seeked="stopBuffering"
       @playing="stopBuffering"
       @canplay="stopBuffering"
       @play="onPlay"
       @pause="onPause"
+      @error="onAudioError"
     />
   </div>
 </template>
@@ -108,7 +109,7 @@ const props = defineProps({ state: Object });
 const emit = defineEmits(['feedback', 'skip', 'previous', 'user-message', 'playing-change', 'open-queue']);
 
 onMounted(() => { applyVolume(); window.addEventListener('keydown', onKeydown); });
-onUnmounted(() => { clearTimeout(bufferTimer); window.removeEventListener('keydown', onKeydown); });
+onUnmounted(() => { clearTimeout(bufferTimer); clearTimeout(stallTimer); window.removeEventListener('keydown', onKeydown); });
 
 // 空格 = 暂停/播放(正常音乐 App 行为)。
 // preventDefault 一举两得:① 阻止页面滚动;② 阻止空格"点击"当前聚焦的按钮——
@@ -164,6 +165,64 @@ let seeking = false;
 const buffering = ref(false);   // seek 后等待 CDN 重新缓冲时的观感指示
 let bufferTimer = null;
 
+// 直链过期恢复:网易云直链 ~20min 失效,失效后 <audio> 要么 error、要么长时间卡死。
+// 每首至多重解析一次(recoveryTried),避免对真·慢 CDN(带宽不足)反复重启缓冲。
+let recoveryTried = false;
+let stallTimer = null;
+const STALL_RECOVER_MS = 15000;   // 卡住且零进度超过此时长 → 当作失效,换新直链一次
+
+// 凭 ncm_id 取新鲜直链,换上去并尽量从中断位置续播。
+// 返回 { ok, reason }:ok=true 已续播;reason='unplayable'(无版权/VIP)| 'error'(网络/NCM 瞬时)
+// | 'stale'(解析期间已切歌)| 'no_id'。
+async function reResolveAndPlay() {
+  const cur = props.state.now;
+  if (!cur?.ncm_id || !audio.value) return { ok: false, reason: 'no_id' };
+  let resolved;
+  try {
+    resolved = await fetch('/api/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ncm_id: cur.ncm_id, title: cur.title, artist: cur.artist }),
+    }).then(r => r.json());
+  } catch { return { ok: false, reason: 'error' }; }
+  // 解析期间用户可能已切歌:别把新链接套到别的歌上
+  if (props.state.now !== cur || !audio.value) return { ok: false, reason: 'stale' };
+  if (!resolved?.found || !resolved.url) return { ok: false, reason: resolved?.reason || 'unplayable' };
+  const resumeAt = audio.value.currentTime || 0;
+  audio.value.src = resolved.url;
+  const restore = () => {
+    try {
+      if (resumeAt > 0 && resumeAt < (audio.value.duration || Infinity)) audio.value.currentTime = resumeAt;
+    } catch {}
+    audio.value?.removeEventListener('loadedmetadata', restore);
+  };
+  audio.value.addEventListener('loadedmetadata', restore);
+  audio.value.load();
+  await audio.value.play().catch(() => {});
+  return { ok: true };
+}
+
+// <audio> 报错(直链 403/失效最常见)→ 换新直链续播一次。
+// 续播成功:无感恢复。无版权:提示并跳下一首。网络/NCM 瞬时故障:提示但**不跳**,
+// 否则 NCM 一挂整列会在几秒内被连环跳光——让用户点播放/下一首手动重试。
+async function onAudioError() {
+  if (!props.state.now?.url) return;   // 空 src 不处理
+  if (recoveryTried) return;           // 本首已试过(见下面分支决定的去留),不再处理
+  recoveryTried = true;
+  const { ok, reason } = await reResolveAndPlay();
+  if (ok || reason === 'stale') return;
+  if (reason === 'error') {
+    notice(`"${props.state.now?.title}" 暂时拿不到(网络/服务问题),点播放或下一首重试`);
+  } else {                              // unplayable / no_id:这首确实播不了
+    notice(`"${props.state.now?.title}" 拿不到可播放直链,跳下一首`);
+    emit('skip');
+  }
+}
+
+function notice(text) {
+  emit('user-message', { ts: new Date().toISOString(), kind: 'system', text });
+}
+
 // Feedback state
 const feedbackHovered = ref(false); // hover to reveal dislike button
 const dislikePanelOpen = ref(false);
@@ -208,7 +267,25 @@ function startBuffering() {
 }
 function stopBuffering() {
   clearTimeout(bufferTimer);
+  clearTimeout(stallTimer);
   buffering.value = false;
+}
+
+// waiting/stalled:既给观感指示,又起一个看门狗——卡住且零进度超过 STALL_RECOVER_MS,
+// 当作直链失效(过期常表现为挂死而非 error),换新直链一次。慢 CDN 也会卡,故只重试一次。
+function onWaiting() {
+  startBuffering();
+  if (recoveryTried || !audio.value) return;
+  clearTimeout(stallTimer);
+  const at = audio.value.currentTime || 0;
+  stallTimer = setTimeout(() => {
+    if (!audio.value || recoveryTried) return;
+    const stuck = (audio.value.currentTime || 0) <= at + 0.25;   // 这段时间内基本没往前走
+    if (stuck && !audio.value.paused && props.state.now?.ncm_id) {
+      recoveryTried = true;
+      reResolveAndPlay();
+    }
+  }, STALL_RECOVER_MS);
 }
 
 function togglePlay() {
@@ -294,6 +371,7 @@ watch(() => props.state.now?.title, (newTitle, oldTitle) => {
   currentSec.value = 0;
   durationSec.value = 0;
   progressPct.value = 0;
+  recoveryTried = false;   // 新歌 → 重置直链重试额度
   // 不在这里手动设 paused——换歌后新 src 自动播放会触发 play 事件回写图标。
   stopBuffering();
 });

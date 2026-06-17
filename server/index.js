@@ -555,6 +555,21 @@ app.post('/api/skip', (req, res) => {
   res.json({ ok: true, now });
 });
 
+// POST /api/resolve — 凭 ncm_id 重新解析一条新鲜直链。
+// 网易云直链 ~20min(expi:1200)过期:播放层在 <audio> 报错/长卡顿时调它续播,
+// 不在 skip/advance 时预解析(避免给每次切歌都加一次网络往返)。
+app.post('/api/resolve', async (req, res) => {
+  const { ncm_id, title, artist } = req.body;
+  if (ncm_id == null) return res.status(400).json({ error: 'ncm_id required' });
+  try {
+    const resolved = await resolveById({ ncm_id, title, artist });
+    res.json(resolved);   // { found, url?, reason?('unplayable'|'error'), ... }
+  } catch (e) {
+    console.error('[resolve] error:', e);
+    res.status(500).json({ found: false, reason: 'error' });
+  }
+});
+
 // POST /api/skip-to — jump to a specific song in queue
 app.post('/api/skip-to', (req, res) => {
   const { title, artist } = req.body;
