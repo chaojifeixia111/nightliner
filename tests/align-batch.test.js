@@ -57,6 +57,25 @@ test('direction turn now aligns familiar/new ratio (swaps to in-direction new)',
   assert.ok(plays.some(p => p.title === '新中文'), 'pulled an in-direction new song');
 });
 
+test('female K-pop direction does not pull known male-group candidates during repair', () => {
+  const dir = { langMatch: 'korean', gender: 'female', artists: [], raw: 'KPOP 女声' };
+  const plays = [
+    { title: 'Off direction', artist: 'Gryffin', source_pool: 'recommend' },
+  ];
+  const meta = {
+    famTarget: 0, direction: dir,
+    libKeys: new Set(),
+    librarySlice: [],
+    recommendPool: [],
+    explorePool: [
+      { name: 'Y, Why...', artist: 'CNBLUE', ncm_id: 1 },
+      { name: 'Talk that Talk', artist: 'TWICE', ncm_id: 2 },
+    ],
+  };
+  repairFamiliarNew(plays, meta);
+  assert.deepEqual(plays.map(p => `${p.title} / ${p.artist}`), ['Talk that Talk / TWICE']);
+});
+
 test('pinnedFirst keeps play[0] while aligning the rest', () => {
   const plays = [
     { title: 'PINNED', artist: 'p', source_pool: 'wildcard' },   // index 0, not in lib

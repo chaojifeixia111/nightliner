@@ -145,3 +145,10 @@ test('arrangeQueue without pinnedFirst shuffles all (pure, no input mutation)', 
   assert.equal(out.length, 3);
   assert.equal(q.length, 3); // input untouched
 });
+
+test('arrangeQueue verbatim preserves playable order', () => {
+  const q = [s({ ncm_id: 1 }), s({ ncm_id: 2 }), s({ ncm_id: 3 })];
+  const out = arrangeQueue(q, { verbatim: true, rng: () => 0 });
+  assert.deepEqual(out.map(x => x.ncm_id), [1, 2, 3]);
+  assert.notEqual(out, q, 'still returns a new array');
+});

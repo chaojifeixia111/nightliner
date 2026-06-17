@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { buildChatMessages, libraryArtistNames } from './context-builder.js';
 import { repairFamiliarNew } from './align-batch.js';
-import { detectDirection, carriesDirection, isOpenReset, describeDirection, detectVerbatim, isAcknowledgment, detectPinnedFirst } from './direction.js';
+import { carriesDirection, describeDirection, detectVerbatim, isAcknowledgment, detectPinnedFirst, resolveDirectionState } from './direction.js';
 import { callLlm, extractJson, callLlmStream } from './llm-adapter.js';
 import { resolvePlayList, resolveById } from './playback-coordinator.js';
 import { recordFeedback, recordPlay, recordQueue, recordChatTurn, recentChatTurns, recentPlays, antiList, activeCooldowns, feedbackStats } from './state-db.js';
@@ -20,6 +20,7 @@ import { playNow, enqueue, clearUpcoming, removeFromQueue, sameSong, applyChatRe
 import { buildPlaylist, plKey } from './playlist-builder.js';
 import { buildExplorePool, songKey } from './explore-pool.js';
 import { songAffinity, artistAffinity, songWeight, lovedSeeds, graduatedLibrary, negativeSongs } from './affinity.js';
+import { normalizePlayItems } from './chat-guards.js';
 
 const config = yaml.parse(await fs.readFile('config.yaml', 'utf8'));
 const PORT = process.env.PORT || config.server.port; // PORT 环境变量可覆盖(开发/preview 用)
@@ -205,19 +206,34 @@ app.post('/api/chat', async (req, res) => {
   };
 
   try {
-    // 方向解析:新方向覆盖;明确放开则清空;纠正/追问/续批沿用上一轮;否则(全新请求)清空。
-    // 关键:用户纠正上一批("怎么又是X""第一首不是说放Y吗")要沿用方向,别把锁清掉。
-    const detected = detectDirection(message, { artistNames: await libraryArtistNames() });
-    if (detected) {
-      currentDirection = detected;                                   // 新方向覆盖
-    } else if (isOpenReset(message)) {
-      currentDirection = null;                                       // 明确放开 → 开放推荐
-    } else if (currentDirection && carriesDirection(message)) {
-      /* 纠正 / 追问 / 续批 → 沿用上一轮方向 */
-    } else {
-      currentDirection = null;                                       // 全新的请求 → 清空
+    // 纯确认词不进 LLM:保留当前 direction/queue,只记录一轮 chat。
+    if (isAcknowledgment(message)) {
+      const say = '嗯。';
+      broadcast({ type: 'dj_stream_start', data: { id: streamId, ts } });
+      broadcast({ type: 'thinking', data: false });
+      broadcast({ type: 'dj_stream_delta', data: { id: streamId, delta: say } });
+      broadcast({ type: 'dj_stream_end', data: { id: streamId, say } });
+      console.log('[chat] 纯确认词 → LLM 前置短路为 chat');
+      recordChatTurn({
+        user_message: message,
+        intent: 'chat',
+        dj_say: say,
+        play_titles_json: JSON.stringify([]),
+        queue_action: null,
+        feedback_extract_json: null,
+        context_now_title: now?.title || null,
+        context_now_artist: now?.artist || null,
+      });
+      return;
     }
-    if (currentDirection) console.log(`[chat] 方向=${describeDirection(currentDirection)}${detected ? '' : ' (沿用上轮)'}`);
+
+    // 方向解析:server 拥有最终方向状态。续批/纠错里的 partial direction 与上一轮做 base ∩ new。
+    const previousDirection = currentDirection;
+    currentDirection = resolveDirectionState(currentDirection, message, { artistNames: await libraryArtistNames() });
+    if (currentDirection) {
+      const carried = previousDirection && carriesDirection(message) ? ' (合并/沿用上轮)' : '';
+      console.log(`[chat] 方向=${describeDirection(currentDirection)}${carried}`);
+    }
 
     const verbatim = detectVerbatim(message); // 「直接放每日推荐」/「第一首放 X」→ 跳过比例换槽
     if (verbatim) console.log('[chat] verbatim 指令 → 跳过 familiar/new 换槽,保住模型选曲与顺序');
@@ -273,8 +289,15 @@ app.post('/api/chat', async (req, res) => {
       console.warn('[chat] parse_error: JSON 修复+json_object 重问均失败,本轮未执行');
 
     } else if (intent === 'recommend') {
-      // Resolve play list → NCM URLs
-      const plays = Array.isArray(parsed.play) ? parsed.play : [];
+      // Resolve play list → NCM URLs. Missing title/artist/reason/source_pool is malformed output;
+      // do not let it reach playback where it would become reason:null cards.
+      const rawPlays = Array.isArray(parsed.play) ? parsed.play : [];
+      const normalized = normalizePlayItems(rawPlays);
+      const plays = normalized.plays;
+      parsed.play = plays;
+      if (normalized.dropped) {
+        console.warn(`[chat] dropped ${normalized.dropped}/${rawPlays.length} malformed play items before resolve`);
+      }
 
       // === Familiar↔new 硬对齐(替代旧 source_pool budget retry)===
       // 模型已在 prompt 里被告知本批确切的「库内 X / 全新 Y」。这里不信它自报的 source_pool,
@@ -316,7 +339,7 @@ app.post('/api/chat', async (req, res) => {
           }
         }
       }
-      const arranged = arrangeQueue(playable, { pinnedFirst });
+      const arranged = arrangeQueue(playable, { pinnedFirst, verbatim });
 
       // Compute hit stats
       const snapshotNorm = await getSnapshotNorm();

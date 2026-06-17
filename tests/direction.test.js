@@ -3,12 +3,14 @@
 // 回归点:英文 EDM(非韩/日艺人)绝不能漏进 korean 方向;短 key("ive")不能子串误命中。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { songMatchesDirection, trackLang, isAcknowledgment, detectVerbatim, detectPinnedFirst } from '../server/direction.js';
+import { songMatchesDirection, trackLang, isAcknowledgment, detectVerbatim, detectPinnedFirst, resolveDirectionState, isGenderReset } from '../server/direction.js';
 
 const KOR = { langMatch: 'korean', gender: null, artists: [], raw: 'kpop' };
 const KOR_F = { langMatch: 'korean', gender: 'female', artists: [], raw: 'kpop女声' };
+const KOR_M = { langMatch: 'korean', gender: 'male', artists: [], raw: 'kpop男声' };
 const JPN = { langMatch: 'japanese', gender: null, artists: [], raw: 'jpop' };
 const CHN = { langMatch: 'chinese', gender: null, artists: [], raw: '国语' };
+const CHN_F = { langMatch: 'chinese', gender: 'female', artists: [], raw: '国语女声' };
 
 test('Latin-titled K-pop by known artist matches korean direction', () => {
   // 用户曲库真实存在、且 [love] 过的歌 —— 现在被歌名脚本判成 english 而漏掉
@@ -18,8 +20,26 @@ test('Latin-titled K-pop by known artist matches korean direction', () => {
   assert.equal(songMatchesDirection('Good Parts (when the quality is bad but I am)', 'LE SSERAFIM', KOR), true);
 });
 
-test('Latin-titled K-pop matches korean even with gender on direction (gender left to LLM)', () => {
+test('Latin-titled female K-pop matches korean female direction', () => {
   assert.equal(songMatchesDirection('Talk that Talk', 'TWICE', KOR_F), true);
+});
+
+test('known male K-pop artists do not satisfy female direction', () => {
+  assert.equal(songMatchesDirection('Y, Why...', 'CNBLUE', KOR_F), false);
+  assert.equal(songMatchesDirection("LET'S NOT FALL IN LOVE", 'BIGBANG', KOR_F), false);
+});
+
+test('known female K-pop artists do not satisfy male direction', () => {
+  assert.equal(songMatchesDirection('Talk that Talk', 'TWICE', KOR_M), false);
+  assert.equal(songMatchesDirection('Off The Record', 'IVE', KOR_M), false);
+});
+
+test('unknown gender stays allowed after language match', () => {
+  assert.equal(songMatchesDirection('노래', 'Unknown K Artist', KOR_F), true);
+});
+
+test('partially-known collaborations are not hard rejected by gender', () => {
+  assert.equal(songMatchesDirection('珊瑚海', '周杰伦 / 梁心颐', CHN_F), true);
 });
 
 test('Hangul-titled K-pop still matches korean (no regression from title path)', () => {
@@ -51,6 +71,31 @@ test('known Korean artist in a collab segment is detected', () => {
 test('chinese direction unaffected (Han-title still chinese)', () => {
   assert.equal(songMatchesDirection('寂寞寂寞就好', '田馥甄', CHN), true);
   assert.equal(songMatchesDirection('Talk that Talk', 'TWICE', CHN), false);
+});
+
+test('resolveDirectionState merges partial continuation with previous language', () => {
+  const next = resolveDirectionState(KOR, '下一批，我只要女声的。');
+  assert.equal(next.langMatch, 'korean');
+  assert.equal(next.gender, 'female');
+});
+
+test('resolveDirectionState preserves previous gender on correction language-only turns', () => {
+  const next = resolveDirectionState(CHN_F, '我说了中文，你怎么还推英文');
+  assert.equal(next.langMatch, 'chinese');
+  assert.equal(next.gender, 'female');
+});
+
+test('resolveDirectionState keeps unmentioned female constraint on KPOP correction', () => {
+  const next = resolveDirectionState(KOR_F, '我要听KPOP啊，你不要给我重新默认的推荐');
+  assert.equal(next.langMatch, 'korean');
+  assert.equal(next.gender, 'female');
+});
+
+test('resolveDirectionState clears only gender for explicit gender reset', () => {
+  assert.equal(isGenderReset('KPOP 不限男女'), true);
+  const next = resolveDirectionState(KOR_F, 'KPOP 不限男女');
+  assert.equal(next.langMatch, 'korean');
+  assert.equal(next.gender, null);
 });
 
 // Layer 3: 纯确认词整句 = 闲聊,不该触发重新推荐("好的" 被当 recommend → 重复推 바빠)

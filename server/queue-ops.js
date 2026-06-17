@@ -54,8 +54,9 @@ export function applyChatRecommendation(queue, now, playable, queueAction) {
 }
 
 // 给 chat 推荐队列排序:整体打散(避免「前面全是听过的」);pinnedFirst 时保住头部那首。
-export function arrangeQueue(playable, { pinnedFirst = false, rng = Math.random } = {}) {
+export function arrangeQueue(playable, { pinnedFirst = false, verbatim = false, rng = Math.random } = {}) {
   const arr = [...playable];
+  if (verbatim) return arr;
   const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   if (pinnedFirst && arr.length > 1) return [arr[0], ...shuffle(arr.slice(1))];
   return shuffle(arr);

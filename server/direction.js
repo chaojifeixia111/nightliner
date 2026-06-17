@@ -20,6 +20,10 @@ export function norm(s) {
   return (s || '').toLowerCase().replace(/\s+/g, '').replace(/[（）()·・,，.。!！?？'’"]/g, '');
 }
 
+function artistKey(s) {
+  return norm(s).replace(/[-_]/g, '');
+}
+
 // 歌名主导的语种判定。返回 'chinese' | 'english' | 'korean' | 'japanese'
 export function songLang(title) {
   const t = title || '';
@@ -35,11 +39,12 @@ export function songLang(title) {
 const ARTIST_LANG = new Map(Object.entries({
   // —— 韩语 / K-pop ——
   twice: 'korean', blackpink: 'korean', ive: 'korean', lesserafim: 'korean',
-  sistar: 'korean', cnblue: 'korean', bigbang: 'korean', akmu: 'korean',
+  sistar: 'korean', apink: 'korean', tara: 'korean',
+  cnblue: 'korean', bigbang: 'korean', akmu: 'korean',
   taeyang: 'korean', '태양': 'korean', 악동뮤지션: 'korean',
   少女时代: 'korean', '소녀시대': 'korean', girlsgeneration: 'korean',
   newjeans: 'korean', '뉴진스': 'korean', aespa: 'korean', '에스파': 'korean',
-  iu: 'korean', '아이유': 'korean',
+  iu: 'korean', '아이유': 'korean', soyou: 'korean', 脸红的思春期: 'korean', bol4: 'korean',
   // —— 日语 / J-pop ——
   米津玄師: 'japanese', 米津玄师: 'japanese', oneokrock: 'japanese', daoko: 'japanese',
   yoasobi: 'japanese', aimer: 'japanese', あいみょん: 'japanese', aimyon: 'japanese',
@@ -47,14 +52,54 @@ const ARTIST_LANG = new Map(Object.entries({
   藤井風: 'japanese', fujiikaze: 'japanese',
 }));
 
+// 艺人 → 性别/团体声部(curated,只放确定项)。未知不拦截,避免把合作曲/制作人误杀。
+const ARTIST_GENDER = new Map(Object.entries({
+  // —— K-pop 女声 / 女团 ——
+  twice: 'female', blackpink: 'female', ive: 'female', lesserafim: 'female',
+  sistar: 'female', 少女时代: 'female', '소녀시대': 'female', girlsgeneration: 'female',
+  newjeans: 'female', '뉴진스': 'female', aespa: 'female', '에스파': 'female',
+  iu: 'female', '아이유': 'female', apink: 'female', tara: 'female',
+  // —— K-pop 男声 / 男团 ——
+  cnblue: 'male', bigbang: 'male', taeyang: 'male', '태양': 'male',
+  // —— 华语女声 / 女团 ——
+  田馥甄: 'female', 孙燕姿: 'female', 邓紫棋: 'female', gem: 'female',
+  梁静茹: 'female', 任然: 'female', 杨丞琳: 'female', 王心凌: 'female',
+  郭静: 'female', 薛凯琪: 'female', 蔡依林: 'female', jolin: 'female',
+  by2: 'female', she: 'female',
+  // —— 华语男声 / 男团 ——
+  周杰伦: 'male', 陈奕迅: 'male', 王杰: 'male', 光良: 'male',
+  林俊杰: 'male', 陶喆: 'male', 王力宏: 'male', 古巨基: 'male',
+  周柏豪: 'male', 郑中基: 'male', 林宥嘉: 'male',
+  // —— 欧美女声(常见已知项,仅用于明显过滤) ——
+  taylorswift: 'female', carlyraejepsen: 'female', daya: 'female',
+  audreymika: 'female', arianagrande: 'female', beberexha: 'female',
+}));
+
 // 从艺人串判定语种。拆分多艺人(/ × & feat with ,),逐段「精确」匹配,
 // 避免短 key(如 'ive')子串误命中('Stive Morgan' 含 'ive' 但不是韩语)。查不到返回 null。
 function artistLang(artist) {
   if (!artist) return null;
   for (const seg of String(artist).split(/[/×&,]|feat\.?|with/i)) {
-    const k = norm(seg).replace(/-/g, '');
+    const k = artistKey(seg);
     if (k && ARTIST_LANG.has(k)) return ARTIST_LANG.get(k);
   }
+  return null;
+}
+
+function artistGender(artist) {
+  if (!artist) return null;
+  const segments = String(artist).split(/[/×&,]|feat\.?|with/i).map(s => s.trim()).filter(Boolean);
+  const seen = new Set();
+  let known = 0;
+  for (const seg of segments) {
+    const k = artistKey(seg);
+    if (k && ARTIST_GENDER.has(k)) {
+      seen.add(ARTIST_GENDER.get(k));
+      known++;
+    }
+  }
+  if (seen.size === 1 && (segments.length === 1 || known === segments.length)) return [...seen][0];
+  if (seen.size >= 1) return 'mixed';
   return null;
 }
 
@@ -76,7 +121,7 @@ const GENDER_KEYWORDS = [
   ['male', ['男声', '男生', '男歌手', '男歌', '男音', '男嗓', 'male']],
 ];
 
-const CONTINUATION = /(下一批|下一首|下一个|下首|再来|继续|接着|接下来|还要|还想|多来|多放|换一批|换批|换一首|来一批|换点别的|next|more)/i;
+const CONTINUATION = /(下一批|下一首|下一个|下首|再来|继续|接着|接下来|还要|还想|多来|多放|换一批|换批|换一首|换成|来一批|换点别的|只要|全是|这次|去掉|next|more)/i;
 
 // 连续/翻页指令:沿用上一轮的方向(本身不带新方向时才生效)
 export function isContinuation(message) {
@@ -95,6 +140,12 @@ export function carriesDirection(message) {
 const OPEN_RESET = /(随便|都行|随意|无所谓|不限|任意|啥都|什么都|换个口味|换种风格|换个方向|别限定|不要限定|放开)/;
 export function isOpenReset(message) {
   return OPEN_RESET.test(message || '');
+}
+
+// 只清掉性别维度,不等于放开整个方向。
+const GENDER_RESET = /(不限男女|男女都行|男女都可以|男声女声都行|男歌女歌都行|不限性别|性别不限|不要限定男女|别限定男女)/;
+export function isGenderReset(message) {
+  return GENDER_RESET.test(message || '');
 }
 
 // 整句只是确认词(无新请求)→ 当 chat,别重新推荐。
@@ -151,6 +202,49 @@ export function detectDirection(message, { artistNames = [] } = {}) {
   return { langMatch, gender, artists, raw: msg.trim() };
 }
 
+function normalizeDirection(dir, { clearGender = false, raw = null } = {}) {
+  if (!dir) return null;
+  return {
+    langMatch: dir.langMatch || null,
+    gender: clearGender ? null : (dir.gender || null),
+    artists: Array.isArray(dir.artists) ? dir.artists : [],
+    raw: raw || dir.raw || '',
+  };
+}
+
+export function mergeDirections(base, next, { clearGender = false, raw = null } = {}) {
+  const b = normalizeDirection(base) || { langMatch: null, gender: null, artists: [], raw: '' };
+  const n = normalizeDirection(next, { clearGender }) || { langMatch: null, gender: null, artists: [], raw: '' };
+  const artists = n.artists.length ? n.artists : b.artists;
+  return {
+    langMatch: n.langMatch || b.langMatch || null,
+    gender: clearGender ? null : (n.gender || b.gender || null),
+    artists,
+    raw: raw || [b.raw, n.raw].filter(Boolean).join(' | '),
+  };
+}
+
+export function resolveDirectionState(current, message, opts = {}) {
+  const detected = detectDirection(message, opts);
+  const genderReset = isGenderReset(message);
+  const openReset = isOpenReset(message) && !genderReset;
+  const shouldCarry = !!current && carriesDirection(message);
+
+  if (openReset) return null;
+
+  if (detected) {
+    if (shouldCarry) return mergeDirections(current, detected, { clearGender: genderReset, raw: message.trim() });
+    return normalizeDirection(detected, { clearGender: genderReset });
+  }
+
+  if (genderReset && current) {
+    return mergeDirections(current, null, { clearGender: true, raw: message.trim() });
+  }
+
+  if (current && carriesDirection(message)) return current;
+  return null;
+}
+
 /**
  * 一首候选歌是否符合当前方向。用于「绝不用跑偏方向的歌凑数」。
  *  - 点名艺人:艺人匹配即过(艺人优先于语种)。
@@ -159,12 +253,18 @@ export function detectDirection(message, { artistNames = [] } = {}) {
  */
 export function songMatchesDirection(title, artist, dir) {
   if (!dir) return true;
+  let artistMatched = false;
   if (dir.artists && dir.artists.length) {
     const an = norm(artist);
-    if (dir.artists.some(a => an.includes(norm(a)))) return true;
-    if (!dir.langMatch) return false;  // 点了艺人又没语种兜底 → 不匹配
+    artistMatched = dir.artists.some(a => an.includes(norm(a)));
+    // 点名艺人优先于语种,但仍要服从明确性别约束。
+    if (!artistMatched && !dir.langMatch) return false;  // 点了艺人又没语种兜底 → 不匹配
   }
-  if (dir.langMatch) return trackLang(title, artist) === dir.langMatch;
+  if (!artistMatched && dir.langMatch && trackLang(title, artist) !== dir.langMatch) return false;
+  if (dir.gender) {
+    const g = artistGender(artist);
+    if (g && g !== 'mixed' && g !== dir.gender) return false;
+  }
   return true;
 }
 

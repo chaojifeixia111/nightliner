@@ -7,7 +7,7 @@
 > - **本 v0.5 = 实际落地现状**,覆盖以上二者;凡有冲突**以代码为准**。
 > **平台**:Windows 11 开发(Node 20+,纯 JS,可无缝迁 Mac)。
 > **风格**:完全私人订制,为 Elliot 一人服务,不通用化。
-> **最后更新**:2026-06-13(Listen 页 + 探索度歌单 + 导航重构)。
+> **最后更新**:2026-06-18(对话护栏:方向合并 / 性别硬校验 / verbatim 保序 / 确认词前置 / play 校验)。
 
 ---
 
@@ -44,10 +44,11 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
 ```
 用户在 ChatInput 打字 → POST /api/chat {message}
   │
-  1. 方向解析(direction.js)
-  │    detectDirection(message, {artistNames}) → {langMatch, gender, artists}
-  │    新方向覆盖;明确"随便/放开"清空(isOpenReset);纠正/追问/续批沿用(carriesDirection);
-  │    其余全新请求清空
+  1. 确认词 + 方向解析(direction.js)
+  │    整句确认词("嗯/好的/ok")先短路为 chat,不调 LLM、不改 queue、不清 direction
+  │    resolveDirectionState(currentDirection, message) → base ∩ new:
+  │    续批/纠错里的 partial direction 只补充/替换提到的维度,未提维度保留;
+  │    明确"随便/放开"清空;明确"不限男女"只清性别
   │
   2. getRecommendPool()(与 RAG 并行)
   │    网易云每日(daily 30)+ 2×personal_fm,按 id 去重,30min 缓存
@@ -70,7 +71,8 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   │    status=failed → index.js 标 intent=parse_error:不执行队列动作、回一句"没接住,再说一次?"、
   │    chat_turns 如实记 parse_error(不污染记忆),绝不静默吞。
   │
-  5. repairFamiliarNew(align-batch.js)— 确定性对齐,不重试(零延迟)
+  5. normalizePlayItems(chat-guards.js) + repairFamiliarNew(align-batch.js)— 确定性对齐,不重试(零延迟)
+  │    play[] 缺 title/artist/reason/source_pool 或 source_pool 非法 → 丢弃,不进播放解析;
   │    跨方向的歌换成方向内候选(新→库内),换不到就丢弃(宁短勿偏,queue 可短);
   │    familiar/new 硬对齐在**非 verbatim** 时执行——含方向 turn(2026-06-17 起方向也尊重探索
   │    档位,用方向内候选拉「全新」)。verbatim(「直接放每日推荐」)整步跳过;
@@ -81,7 +83,8 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   7. resolvePlayList(playback-coordinator.js)
   │    cloudsearch → pickBest(只原唱)→ song/url(exhigh 320k);无 URL 则丢弃
   │
-  8. applyChatRecommendation(queue-ops.js)更新 currentQueue / now —— 护栏:playable 为空时
+  8. arrangeQueue + applyChatRecommendation(queue-ops.js)更新 currentQueue / now —— 护栏:playable 为空时
+  │    非 verbatim 默认打散;verbatim 保留 resolved playable 原顺序;pinnedFirst 保队首
   │    **不动 queue**(防止"解析空/全无版权 → 整列被清空、now=null、播放中断"),回一句系统提示。
   │    recordQueue + recordChatTurn(异步 RAG 索引本轮)
   9. broadcast: queue / now / dj_stream_end
@@ -117,8 +120,8 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
 
 - `familiarTarget(mode, n) = round(lib/100 × n)`,其余为「全新」。
 - **硬对齐**:`repairFamiliarNew` 不信模型自报的 `source_pool`,用真实曲库 `libKeys` 判定每首库内/全新,确定性多退少补(从手边候选池换槽,**不重试**)。这取代了 v0.5-early 的 `enforceSourcePoolBudget`+retry。
-- **verbatim 例外**:`detectVerbatim(message)`(「直接/原样/按顺序 放每日推荐」)置 `meta.verbatim`,跳过比例换槽,保住模型选曲与顺序——显式摆放指令下 Agency 让位于"照办"。仍服从方向硬约束与 anti/cooldown。
-- **pinnedFirst(与 verbatim 不同)**:`detectPinnedFirst(message)`(「第一首放/听 X」)置 `meta.pinnedFirst`,保护 `play[0]`(点名的那首保持队首),其余歌**仍服从档位比例换槽**(这是与 verbatim 的关键区别:verbatim 跳过换槽,pinnedFirst 不跳过)。若 `play[0]` 无法解析出可播 URL,先重试一次解析路径,仍失败才向用户发系统提示而非静默丢弃。chat 队列整体打散(`arrangeQueue`),pinnedFirst 时只保住队首。
+- **verbatim 例外**:`detectVerbatim(message)`(「直接/原样/按顺序 放每日推荐」)置 `meta.verbatim`,跳过比例换槽,并在最终 `arrangeQueue` 层保留 resolved playable 原顺序——显式摆放指令下 Agency 让位于"照办"。仍服从方向硬约束与 anti/cooldown;不可播歌曲可被丢弃,幸存歌曲不洗牌。
+- **pinnedFirst(与 verbatim 不同)**:`detectPinnedFirst(message)`(「第一首放/听 X」)置 `meta.pinnedFirst`,保护 `play[0]`(点名的那首保持队首),其余歌**仍服从档位比例换槽**(这是与 verbatim 的关键区别:verbatim 跳过换槽并保序,pinnedFirst 不跳过)。若 `play[0]` 无法解析出可播 URL,先重试一次解析路径,仍失败才向用户发系统提示而非静默丢弃。chat 队列整体打散(`arrangeQueue`),pinnedFirst 时只保住队首。
 
 ### 3.2 方向硬约束(优先级高于档位)— `server/direction.js`
 
@@ -128,10 +131,10 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
 - **语种判定 = `trackLang(title, artist)`:艺人语种表优先,歌名脚本兜底**(2026-06-13)。`direction.js` 内置 `ARTIST_LANG`(Elliot 真实曲库 + 反馈里的韩/日艺人:TWICE / IVE / BIGBANG / LE SSERAFIM / 米津玄師 / ONE OK ROCK…),命中即定语种,**无视拉丁标题**;查不到才退回 `songLang(title)`(歌名脚本,title-primary)。
   - **为何**:纯歌名脚本对 K-pop/J-pop 会塌——绝大多数歌名是拉丁字母("Talk that Talk"/TWICE、"Lemon"/米津玄師),被判 english,导致"韩语/日语"方向把它们全过滤掉,候选池缩到只剩歌名带谚文/假名的极少数。**实测坑:点「KPOP女声」整池只剩 1 首(바빠/SISTAR),其余全是被误杀的拉丁标题 K-pop。**修复后同请求库内候选 2→10。
   - **兜底仍保护**:未知艺人走 `songLang`,latin 标题 → english,**即使艺人含中文**——"Sad Sometimes"(黄霄雲 EDM)仍排除出"国语"。`ARTIST_LANG` 只收**确定是韩/日**的艺人,不放中/英艺人,以免污染其它方向。新增韩/日艺人往该表加(key 用 `norm()` 形式)。
-- **会话延续**:`currentDirection` 存在 index.js,4 分支判定——①新方向覆盖;②明确"随便/都行/放开"清空(`isOpenReset`);③纠正/追问("怎么又是X""第一首不是说放Y吗")与续批("下一批/继续")沿用上轮方向(`carriesDirection`);④其余全新请求清空(防方向卡死在旧请求上)。
+- **会话延续**:`currentDirection` 存在 index.js,由 `resolveDirectionState` 统一演进。续批/纠错("下一批/继续/我说了/不要给…")里检测到的 partial direction 与上一轮做 `base ∩ new`:KPOP + "只要女声" => 韩语女声;国语女声 + "我说了中文" => 国语女声;KPOP 女声 + "我要听KPOP啊"仍保留女声。全新请求替换方向;明确"随便/都行/放开"清空;明确"不限男女/男女都行"只清性别维度。
 - **取数**:RAG 用方向词检索(而非空查询"下一批");库内从**全量收藏按方向随机采样**(每次不同 → 缓解"老推同几首");recommend / explore 池都按方向过滤;explore 种子取方向内收藏曲(→ simi 近邻 + 同艺人深挖天然在方向内)。
 - **宁短勿偏**(2026-06,取代早期"比例让位"):跑偏方向的歌优先换成方向内候选(新→库内),候选枯竭则**直接丢弃**——queue 可以短,**绝不用跨方向歌凑满,绝不谎报语种**。方向 turn **仍服从档位 familiar/new 换槽**(2026-06-17:取消了"方向 turn 不再硬对齐"例外,统一走 `repairFamiliarNew`)。chat 推荐队列落盘前经 `arrangeQueue` 打散(避免「前面全是听过的」),pinnedFirst 时只保住队首。
-- **server 只保证语种**(艺人语种表 + 脚本兜底);**性别 / 风格交给 LLM**(歌名/艺人名无法可靠判定性别)。一首韩语男声(태양 / CNBLUE / BIGBANG)可能进到"女声"候选池里、由 LLM 终筛掉——可接受,跨语种乱入已根治。
+- **server 保证语种 + 保守性别硬校验**:语种用 `ARTIST_LANG` + 歌名脚本;性别用小型 `ARTIST_GENDER` 确定表。已知男团/男声(CNBLUE / BIGBANG / 王杰 / 陈奕迅等)不会满足女声方向;已知女团/女声(TWICE / IVE / 田馥甄 / 孙燕姿等)不会满足男声方向。未知或混合合作曲不硬拒绝,交给 LLM 终筛,避免误杀。
 - 详见 memory: `project_direction_hard_constraint.md`。
 
 ### 3.3 三个候选池 + agency 层
@@ -174,9 +177,9 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
   - `prompts/user-turn.md`(每轮变):用户消息 + now-playing + queue + **方向块** + **探索档位 + 本批 familiar/new 目标** + RAG 召回(库内/recommend/explore/反馈/taste/life-stage/mood/vibe/语义历史)+ anti/cooldown/**降权**/RECENT_PLAYS。
   - 多轮 `messages[]`:最近 5 轮 chat_turns 回放成 user/assistant 对(近因)。
 - **prose-then-JSON**:第一步纯文本 = `say`(逐字流式);第二步 ```json``` 块 = `{intent, play[], queueAction, feedback_extract, modeUpdate}`,**不含 say**。
-  - **开场白只说氛围/方向,不点具体歌名**:`say` 先于 JSON 流出,而 `repairFamiliarNew` 可能换掉歌——点名就会和真实队列对不上(prompt 约束;每首"为什么"放 per-song `reason`,播放时逐首显示)。
-  - `intent` ∈ `recommend` / `chat` / `feedback`(+ server 端 `parse_error`)。**server 端兜底**:整句确认词("好的"/"嗯")→ 强制 `chat`(`isAcknowledgment`,绝不重新推荐);`status=failed` → `parse_error`(不入队、不污染 chat_turns 记忆)。
-  - `play[]` 每首:`title, artist, reason, memoryLink, confidence, source_preference, source_pool`。
+  - **开场白只说氛围/方向,不点具体歌名/艺人名/精确数量/最终顺序承诺**:`say` 先于 JSON 流出,而 `repairFamiliarNew` / 字段校验 / 版权解析 / `arrangeQueue` 可能换歌、丢歌、保序或打散——点名和数数都会和真实队列对不上(prompt 约束;每首"为什么"放 per-song `reason`,播放时逐首显示)。
+  - `intent` ∈ `recommend` / `chat` / `feedback`(+ server 端 `parse_error`)。**server 端兜底**:整句确认词("好的"/"嗯")→ LLM 前置短路为 `chat`(`isAcknowledgment`,绝不重新推荐、不记录 queueAction、不清 direction);`status=failed` → `parse_error`(不入队、不污染 chat_turns 记忆)。
+  - `play[]` 每首:`title, artist, reason, memoryLink, confidence, source_preference, source_pool`。其中 `title/artist/reason/source_pool` 为 server 入队必填;缺失或 `source_pool` 非 `library|recommend|wildcard` 的条目由 `normalizePlayItems` 丢弃,不会进入播放解析。
   - `feedback_extract`(intent=feedback 时):`{target_title, target_artist, target_category, signal, reason}`。
 - **provider 路由**(`llm-adapter.js`,按 model 名前缀):`claude-*`→ claude CLI 子进程;`deepseek-*`→ DeepSeek HTTP;`qwen-*`→ DashScope HTTP。**流式仅 deepseek/qwen**(SSE);claude 无流式 → 整段拿回再一次性 emit。
 - **每次调用全量落盘** `data/llm-calls.jsonl`:`{ts, model, trigger, prompt(JSON.stringify{system,messages}), response, duration_ms, error}`。这是 prompt 调试的关键资产。
@@ -304,7 +307,8 @@ WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `
 server/
   index.js              Express + ws 主入口;/api/* 路由;会话态(queue/now/direction/tuning)
   context-builder.js    buildChatMessages:RAG + 档位 + 方向 + 池子 + 降权 → {system, messages, meta}
-  direction.js          方向检测/匹配/延续(detectDirection, songLang, trackLang, songMatchesDirection, isContinuation)
+  direction.js          方向检测/匹配/状态合并(resolveDirectionState, detectDirection, trackLang, songMatchesDirection)
+  chat-guards.js        chat 输出入队前纯校验(normalizePlayItems:必填字段/source_pool)
   exploration-modes.js  5 档命名模式表 + modeForValue + familiarTarget
   align-batch.js        repairFamiliarNew:方向感知 + familiar/new 硬对齐(确定性换槽)
   explore-pool.js       buildExplorePool:simi 近邻 + 同艺人深挖(agency 层,供 discovery.js 的 near tier 内调用)
@@ -320,7 +324,7 @@ server/
   playback-coordinator.js  resolvePlayList(cloudsearch → pickBest 原唱 → songUrl)+ resolveById(手动点播按 id 直取)
   search-normalize.js   NCM 返回 → 前端统一形状(song/artist)纯函数
   playlist-builder.js   buildPlaylist:按档位配方从三池确定性随机抽样(Listen 点即播歌单)纯函数
-  queue-ops.js          playNow/enqueue/clearUpcoming/removeFromQueue:currentQueue/now 纯变更(手动点播/清空/移除用)
+  queue-ops.js          playNow/enqueue/clearUpcoming/removeFromQueue/arrangeQueue:currentQueue/now 纯变更 + chat 队列排序(verbatim 保序)
   budget-enforcer.js    checkReasonHallucination(仍用);enforceSourcePoolBudget(legacy,已不在 chat 流程)
 
 prompts/
