@@ -112,13 +112,16 @@ onMounted(() => { applyVolume(); window.addEventListener('keydown', onKeydown); 
 onUnmounted(() => { clearTimeout(bufferTimer); clearTimeout(stallTimer); window.removeEventListener('keydown', onKeydown); });
 
 // 空格 = 暂停/播放(正常音乐 App 行为)。
-// preventDefault 一举两得:① 阻止页面滚动;② 阻止空格"点击"当前聚焦的按钮——
-// 之前刚点过红心后红心按钮还聚焦着,按空格就被浏览器当成再点一次红心。
+// preventDefault 阻止页面滚动 + 阻止空格"点击"当前聚焦的按钮。但 preventDefault
+// 只拦掉合成的 click(quickLove 不会跑),拦不掉浏览器在按住空格期间给聚焦按钮
+// 套上的原生 :active 视觉——刚用鼠标点过红心,按钮还聚焦着,按空格红心就会
+// scale + 涟漪闪一下。所以这里把聚焦的按钮 blur 掉,让它不再是空格的激活目标。
 function onKeydown(e) {
   if (e.code !== 'Space') return;
   const t = e.target;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
   e.preventDefault();
+  if (t && t.tagName === 'BUTTON') t.blur();
   togglePlay();
 }
 
