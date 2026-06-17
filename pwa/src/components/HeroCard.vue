@@ -268,17 +268,20 @@ function startBuffering() {
 function stopBuffering() {
   clearTimeout(bufferTimer);
   clearTimeout(stallTimer);
+  stallTimer = null;
   buffering.value = false;
 }
 
 // waiting/stalled:既给观感指示,又起一个看门狗——卡住且零进度超过 STALL_RECOVER_MS,
 // 当作直链失效(过期常表现为挂死而非 error),换新直链一次。慢 CDN 也会卡,故只重试一次。
+// 注意:stalled 会每隔几秒重复触发,看门狗只在没有 pending 时起一个、不重置——
+// 否则反复 stalled 会把 15s 计时一直往后推、永远触发不了。播放真恢复时 stopBuffering 清掉。
 function onWaiting() {
   startBuffering();
-  if (recoveryTried || !audio.value) return;
-  clearTimeout(stallTimer);
+  if (recoveryTried || !audio.value || stallTimer) return;
   const at = audio.value.currentTime || 0;
   stallTimer = setTimeout(() => {
+    stallTimer = null;
     if (!audio.value || recoveryTried) return;
     const stuck = (audio.value.currentTime || 0) <= at + 0.25;   // 这段时间内基本没往前走
     if (stuck && !audio.value.paused && props.state.now?.ncm_id) {
