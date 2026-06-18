@@ -72,7 +72,7 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   │    chat_turns 如实记 parse_error(不污染记忆),绝不静默吞。
   │
   5. normalizePlayItems(chat-guards.js) + repairFamiliarNew(align-batch.js)— 确定性对齐,不重试(零延迟)
-  │    play[] 缺 title/artist/reason/source_pool 或 source_pool 非法 → 丢弃,不进播放解析;
+  │    play[] 缺 title/artist/reason → 丢弃,不进播放解析;source_pool 缺失或非法 → 归一为 wildcard;
   │    跨方向的歌换成方向内候选(新→库内),换不到就丢弃(宁短勿偏,queue 可短);
   │    familiar/new 硬对齐在**非 verbatim** 时执行——含方向 turn(2026-06-17 起方向也尊重探索
   │    档位,用方向内候选拉「全新」)。verbatim(「直接放每日推荐」)整步跳过;
@@ -179,7 +179,7 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
 - **prose-then-JSON**:第一步纯文本 = `say`(逐字流式);第二步 ```json``` 块 = `{intent, play[], queueAction, feedback_extract, modeUpdate}`,**不含 say**。
   - **开场白只说氛围/方向,不点具体歌名/艺人名/精确数量/最终顺序承诺**:`say` 先于 JSON 流出,而 `repairFamiliarNew` / 字段校验 / 版权解析 / `arrangeQueue` 可能换歌、丢歌、保序或打散——点名和数数都会和真实队列对不上(prompt 约束;每首"为什么"放 per-song `reason`,播放时逐首显示)。
   - `intent` ∈ `recommend` / `chat` / `feedback`(+ server 端 `parse_error`)。**server 端兜底**:整句确认词("好的"/"嗯")→ LLM 前置短路为 `chat`(`isAcknowledgment`,绝不重新推荐、不记录 queueAction、不清 direction);`status=failed` → `parse_error`(不入队、不污染 chat_turns 记忆)。
-  - `play[]` 每首:`title, artist, reason, memoryLink, confidence, source_preference, source_pool`。其中 `title/artist/reason/source_pool` 为 server 入队必填;缺失或 `source_pool` 非 `library|recommend|wildcard` 的条目由 `normalizePlayItems` 丢弃,不会进入播放解析。
+  - `play[]` 每首:`title, artist, reason, memoryLink, confidence, source_preference, source_pool`。其中 `title/artist/reason` 为 server 入队必填;缺失的条目由 `normalizePlayItems` 丢弃,不会进入播放解析。`source_pool` 应输出 `library|recommend|wildcard`,但缺失或非法时 server 会归一为 `wildcard`,避免因辅助标签缺失把可播队列整批丢掉。
   - `feedback_extract`(intent=feedback 时):`{target_title, target_artist, target_category, signal, reason}`。
 - **provider 路由**(`llm-adapter.js`,按 model 名前缀):`claude-*`→ claude CLI 子进程;`deepseek-*`→ DeepSeek HTTP;`qwen-*`→ DashScope HTTP。**流式仅 deepseek/qwen**(SSE);claude 无流式 → 整段拿回再一次性 emit。
 - **每次调用全量落盘** `data/llm-calls.jsonl`:`{ts, model, trigger, prompt(JSON.stringify{system,messages}), response, duration_ms, error}`。这是 prompt 调试的关键资产。
@@ -308,7 +308,7 @@ server/
   index.js              Express + ws 主入口;/api/* 路由;会话态(queue/now/direction/tuning)
   context-builder.js    buildChatMessages:RAG + 档位 + 方向 + 池子 + 降权 → {system, messages, meta}
   direction.js          方向检测/匹配/状态合并(resolveDirectionState, detectDirection, trackLang, songMatchesDirection)
-  chat-guards.js        chat 输出入队前纯校验(normalizePlayItems:必填字段/source_pool)
+  chat-guards.js        chat 输出入队前纯校验(normalizePlayItems:必填字段/source_pool 归一)
   exploration-modes.js  5 档命名模式表 + modeForValue + familiarTarget
   align-batch.js        repairFamiliarNew:方向感知 + familiar/new 硬对齐(确定性换槽)
   explore-pool.js       buildExplorePool:simi 近邻 + 同艺人深挖(agency 层,供 discovery.js 的 near tier 内调用)

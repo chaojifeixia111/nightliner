@@ -55,7 +55,7 @@
 - Create/modify tests as appropriate.
 
 - [x] Extract pure helpers from `index.js` if needed to make validation testable without starting the server.
-- [x] Add test for play item validation dropping missing `reason` / invalid `source_pool`.
+- [x] Add test for play item validation dropping missing `reason` and normalizing missing/invalid `source_pool`.
 - [x] Pre-short-circuit `isAcknowledgment(message)` before prompt construction and LLM call.
 - [x] Ensure recorded chat turn for acknowledgment has `intent=chat`, empty play list, and no queue action.
 
@@ -79,4 +79,10 @@
   - any new helper test file.
 - [x] Run full suite: `npm test`.
 - [x] Review `git diff`.
-- [ ] Commit with Conventional Commit.
+- [x] Commit with Conventional Commit.
+
+## 2026-06-18 Follow-up: source_pool tolerance
+
+- [x] Root cause: a valid recommend payload with `title/artist/reason` but no `source_pool` was normalized to an empty play list, so `replace_all` produced no queue.
+- [x] Regression test: missing/invalid `source_pool` keeps the item and normalizes it to `wildcard`; missing `title/artist/reason` is still dropped.
+- [x] Design and prompt docs now distinguish required playback fields from the advisory `source_pool` label.
