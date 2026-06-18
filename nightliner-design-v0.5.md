@@ -7,7 +7,7 @@
 > - **本 v0.5 = 实际落地现状**,覆盖以上二者;凡有冲突**以代码为准**。
 > **平台**:Windows 11 开发(Node 20+,纯 JS,可无缝迁 Mac)。
 > **风格**:完全私人订制,为 Elliot 一人服务,不通用化。
-> **最后更新**:2026-06-18(对话护栏:方向合并 / 性别硬校验 / verbatim 保序 / 确认词前置 / play 校验)。
+> **最后更新**:2026-06-18(对话护栏:方向合并 / fresh 方向重置 / 性别硬校验 / verbatim 保序 / 确认词前置 / play 校验)。
 
 ---
 
@@ -46,8 +46,8 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   │
   1. 确认词 + 方向解析(direction.js)
   │    整句确认词("嗯/好的/ok")先短路为 chat,不调 LLM、不改 queue、不清 direction
-  │    resolveDirectionState(currentDirection, message) → base ∩ new:
-  │    续批/纠错里的 partial direction 只补充/替换提到的维度,未提维度保留;
+  │    resolveDirectionState(currentDirection, message):
+  │    纯续批/纠错里的 partial direction 才做 base ∩ new;新的明确语种/艺人请求重置未提维度;
   │    明确"随便/放开"清空;明确"不限男女"只清性别
   │
   2. getRecommendPool()(与 RAG 并行)
@@ -131,7 +131,7 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
 - **语种判定 = `trackLang(title, artist)`:艺人语种表优先,歌名脚本兜底**(2026-06-13)。`direction.js` 内置 `ARTIST_LANG`(Elliot 真实曲库 + 反馈里的韩/日艺人:TWICE / IVE / BIGBANG / LE SSERAFIM / 米津玄師 / ONE OK ROCK…),命中即定语种,**无视拉丁标题**;查不到才退回 `songLang(title)`(歌名脚本,title-primary)。
   - **为何**:纯歌名脚本对 K-pop/J-pop 会塌——绝大多数歌名是拉丁字母("Talk that Talk"/TWICE、"Lemon"/米津玄師),被判 english,导致"韩语/日语"方向把它们全过滤掉,候选池缩到只剩歌名带谚文/假名的极少数。**实测坑:点「KPOP女声」整池只剩 1 首(바빠/SISTAR),其余全是被误杀的拉丁标题 K-pop。**修复后同请求库内候选 2→10。
   - **兜底仍保护**:未知艺人走 `songLang`,latin 标题 → english,**即使艺人含中文**——"Sad Sometimes"(黄霄雲 EDM)仍排除出"国语"。`ARTIST_LANG` 只收**确定是韩/日**的艺人,不放中/英艺人,以免污染其它方向。新增韩/日艺人往该表加(key 用 `norm()` 形式)。
-- **会话延续**:`currentDirection` 存在 index.js,由 `resolveDirectionState` 统一演进。续批/纠错("下一批/继续/我说了/不要给…")里检测到的 partial direction 与上一轮做 `base ∩ new`:KPOP + "只要女声" => 韩语女声;国语女声 + "我说了中文" => 国语女声;KPOP 女声 + "我要听KPOP啊"仍保留女声。全新请求替换方向;明确"随便/都行/放开"清空;明确"不限男女/男女都行"只清性别维度。
+- **会话延续**:`currentDirection` 存在 index.js,由 `resolveDirectionState` 统一演进。纯续批/纠错("下一批/继续/我说了/不要给…")里的 partial direction 才与上一轮做 `base ∩ new`:KPOP + "只要女声" => 韩语女声;国语女声 + "我说了中文" => 国语女声;KPOP 女声 + "我要听KPOP啊"仍保留女声。新的明确语种/艺人请求按 fresh direction 处理,未重说的硬维度直接清空:华语男声+陶喆/李荣浩/林俊杰 后说"来一批华语流行" => 仅中文/国语;说"来一批英文流行" => 仅英文;说"来一批林俊杰" => 仅艺人林俊杰。明确"随便/都行/放开"清空;明确"不限男女/男女都行"只清性别维度。
 - **取数**:RAG 用方向词检索(而非空查询"下一批");库内从**全量收藏按方向随机采样**(每次不同 → 缓解"老推同几首");recommend / explore 池都按方向过滤;explore 种子取方向内收藏曲(→ simi 近邻 + 同艺人深挖天然在方向内)。
 - **宁短勿偏**(2026-06,取代早期"比例让位"):跑偏方向的歌优先换成方向内候选(新→库内),候选枯竭则**直接丢弃**——queue 可以短,**绝不用跨方向歌凑满,绝不谎报语种**。方向 turn **仍服从档位 familiar/new 换槽**(2026-06-17:取消了"方向 turn 不再硬对齐"例外,统一走 `repairFamiliarNew`)。chat 推荐队列落盘前经 `arrangeQueue` 打散(避免「前面全是听过的」),pinnedFirst 时只保住队首。
 - **server 保证语种 + 保守性别硬校验**:语种用 `ARTIST_LANG` + 歌名脚本;性别用小型 `ARTIST_GENDER` 确定表。已知男团/男声(CNBLUE / BIGBANG / 王杰 / 陈奕迅等)不会满足女声方向;已知女团/女声(TWICE / IVE / 田馥甄 / 孙燕姿等)不会满足男声方向。未知或混合合作曲不硬拒绝,交给 LLM 终筛,避免误杀。

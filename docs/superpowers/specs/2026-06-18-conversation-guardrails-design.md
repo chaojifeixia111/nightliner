@@ -19,13 +19,19 @@ The 2026-06-18 conversation probe found several failures where the DJ said or qu
 
 ### Direction state
 
-Direction state is a server-owned hard constraint. For continuation/correction turns, detected partial directions are merged with the existing direction as `base ∩ new`:
+Direction state is a server-owned hard constraint. For pure continuation/correction turns, detected partial directions are merged with the existing direction as `base ∩ new`:
 
 - `KPOP` then `下一批，我只要女声的` => `韩语 · 女声`
 - `国语女声` then `我说了中文` => `中文/国语 · 女声`
 - `KPOP 女声` then `我要听KPOP啊` => keep `韩语 · 女声`
 
-Unmentioned dimensions are preserved on continuation/correction. They are cleared only by explicit reset/open language (`随便`, `都行`, `不限`, etc.) or by an explicit replacement of that dimension (`换成英文男声`, `不限男女`, `男女都行`).
+Unmentioned dimensions are preserved only on pure continuation/correction. Fresh explicit language or artist requests replace the current hard direction instead of inheriting stale dimensions:
+
+- `中文/国语 · 男声 · 艺人:陶喆、李荣浩、林俊杰` then `来一批华语流行` => `中文/国语`
+- `中文/国语 · 男声 · 艺人:陶喆、李荣浩、林俊杰` then `来一批英文流行` => `英文/欧美`
+- `韩语 · 女声` then `来一批林俊杰` => `艺人:林俊杰`
+
+Direction is still cleared by explicit reset/open language (`随便`, `都行`, `不限`, etc.) or by an explicit replacement of that dimension (`换成英文男声`, `不限男女`, `男女都行`).
 
 ### Gender matching
 

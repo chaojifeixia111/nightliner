@@ -224,16 +224,28 @@ export function mergeDirections(base, next, { clearGender = false, raw = null } 
   };
 }
 
+function hasFreshDirectionAnchor(dir) {
+  return !!(dir?.langMatch || dir?.artists?.length);
+}
+
+function shouldMergeDetectedDirection(message, detected) {
+  const msg = message || '';
+  if (!carriesDirection(msg)) return false;
+  if (CORRECTION.test(msg)) return true;
+  return !hasFreshDirectionAnchor(detected);
+}
+
 export function resolveDirectionState(current, message, opts = {}) {
   const detected = detectDirection(message, opts);
   const genderReset = isGenderReset(message);
   const openReset = isOpenReset(message) && !genderReset;
-  const shouldCarry = !!current && carriesDirection(message);
 
   if (openReset) return null;
 
   if (detected) {
-    if (shouldCarry) return mergeDirections(current, detected, { clearGender: genderReset, raw: message.trim() });
+    if (current && shouldMergeDetectedDirection(message, detected)) {
+      return mergeDirections(current, detected, { clearGender: genderReset, raw: message.trim() });
+    }
     return normalizeDirection(detected, { clearGender: genderReset });
   }
 

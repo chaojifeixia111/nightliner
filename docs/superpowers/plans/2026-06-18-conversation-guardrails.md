@@ -86,3 +86,9 @@
 - [x] Root cause: a valid recommend payload with `title/artist/reason` but no `source_pool` was normalized to an empty play list, so `replace_all` produced no queue.
 - [x] Regression test: missing/invalid `source_pool` keeps the item and normalizes it to `wildcard`; missing `title/artist/reason` is still dropped.
 - [x] Design and prompt docs now distinguish required playback fields from the advisory `source_pool` label.
+
+## 2026-06-18 Follow-up: fresh direction resets
+
+- [x] Root cause: `来一批华语流行` matched the continuation regex and merged with stale `男声 · 艺人:陶喆、李荣浩、林俊杰`, causing a broad request to stay narrowly artist-locked.
+- [x] Regression tests: fresh language requests clear stale gender/artists; pure `下一批` still carries; explicit artist requests clear incompatible previous language/gender.
+- [x] Design and prompt docs now distinguish pure continuation/refinement from fresh explicit language/artist requests.

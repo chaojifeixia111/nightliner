@@ -11,6 +11,7 @@ const KOR_M = { langMatch: 'korean', gender: 'male', artists: [], raw: 'kpop男�
 const JPN = { langMatch: 'japanese', gender: null, artists: [], raw: 'jpop' };
 const CHN = { langMatch: 'chinese', gender: null, artists: [], raw: '国语' };
 const CHN_F = { langMatch: 'chinese', gender: 'female', artists: [], raw: '国语女声' };
+const CHN_M_ARTISTS = { langMatch: 'chinese', gender: 'male', artists: ['陶喆', '李荣浩', '林俊杰'], raw: '华语男声 陶喆 林俊杰 李荣浩' };
 
 test('Latin-titled K-pop by known artist matches korean direction', () => {
   // 用户曲库真实存在、且 [love] 过的歌 —— 现在被歌名脚本判成 english 而漏掉
@@ -96,6 +97,34 @@ test('resolveDirectionState clears only gender for explicit gender reset', () =>
   const next = resolveDirectionState(KOR_F, 'KPOP 不限男女');
   assert.equal(next.langMatch, 'korean');
   assert.equal(next.gender, null);
+});
+
+test('resolveDirectionState treats broad language requests as fresh direction resets', () => {
+  const artistNames = ['陶喆', '李荣浩', '林俊杰', '陈奕迅'];
+
+  const chinese = resolveDirectionState(CHN_M_ARTISTS, '来一批华语流行', { artistNames });
+  assert.equal(chinese.langMatch, 'chinese');
+  assert.equal(chinese.gender, null);
+  assert.deepEqual(chinese.artists, []);
+
+  const english = resolveDirectionState(CHN_M_ARTISTS, '来一批英文流行', { artistNames });
+  assert.equal(english.langMatch, 'english');
+  assert.equal(english.gender, null);
+  assert.deepEqual(english.artists, []);
+});
+
+test('resolveDirectionState keeps old direction only for pure continuation', () => {
+  const next = resolveDirectionState(CHN_M_ARTISTS, '下一批');
+  assert.equal(next.langMatch, 'chinese');
+  assert.equal(next.gender, 'male');
+  assert.deepEqual(next.artists, ['陶喆', '李荣浩', '林俊杰']);
+});
+
+test('resolveDirectionState treats explicit artist requests as fresh hard targets', () => {
+  const next = resolveDirectionState(KOR_F, '来一批林俊杰', { artistNames: ['林俊杰'] });
+  assert.equal(next.langMatch, null);
+  assert.equal(next.gender, null);
+  assert.deepEqual(next.artists, ['林俊杰']);
 });
 
 // Layer 3: 纯确认词整句 = 闲聊,不该触发重新推荐("好的" 被当 recommend → 重复推 바빠)
