@@ -7,8 +7,9 @@ import fs from 'fs/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { buildChatMessages, libraryArtistNames } from './context-builder.js';
 import { repairFamiliarNew } from './align-batch.js';
-import { carriesDirection, describeDirection, detectVerbatim, isAcknowledgment, detectPinnedFirst, resolveDirectionState } from './direction.js';
-import { callLlm, extractJson, callLlmStream } from './llm-adapter.js';
+import { carriesDirection, describeDirection, detectVerbatim, isAcknowledgment, detectPinnedFirst, resolveDirectionStateWithArtistAliases } from './direction.js';
+import { callLlmStream } from './llm-adapter.js';
+import { makeArtistAliasResolver } from './artist-resolver.js';
 import { resolvePlayList, resolveById } from './playback-coordinator.js';
 import { recordFeedback, recordPlay, recordQueue, recordChatTurn, recentChatTurns, recentPlays, antiList, activeCooldowns, feedbackStats } from './state-db.js';
 import { recommendSongs, personalFm, cloudsearch, searchArtists, artistTopSongs } from './ncm-client.js';
@@ -24,6 +25,7 @@ import { normalizePlayItems } from './chat-guards.js';
 
 const config = yaml.parse(await fs.readFile('config.yaml', 'utf8'));
 const PORT = process.env.PORT || config.server.port; // PORT 环境变量可覆盖(开发/preview 用)
+const resolveArtistAlias = makeArtistAliasResolver({ model: config.models.light_command || config.models.chat_mode });
 
 const app = express();
 app.use(express.json());
@@ -229,7 +231,10 @@ app.post('/api/chat', async (req, res) => {
 
     // 方向解析:server 拥有最终方向状态。续批/纠错里的 partial direction 与上一轮做 base ∩ new。
     const previousDirection = currentDirection;
-    currentDirection = resolveDirectionState(currentDirection, message, { artistNames: await libraryArtistNames() });
+    currentDirection = await resolveDirectionStateWithArtistAliases(currentDirection, message, {
+      artistNames: await libraryArtistNames(),
+      resolveArtistAlias,
+    });
     if (currentDirection) {
       const carried = previousDirection && carriesDirection(message) ? ' (合并/沿用上轮)' : '';
       console.log(`[chat] 方向=${describeDirection(currentDirection)}${carried}`);

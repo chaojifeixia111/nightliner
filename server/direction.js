@@ -235,8 +235,7 @@ function shouldMergeDetectedDirection(message, detected) {
   return !hasFreshDirectionAnchor(detected);
 }
 
-export function resolveDirectionState(current, message, opts = {}) {
-  const detected = detectDirection(message, opts);
+function resolveDirectionStateFromDetected(current, message, detected) {
   const genderReset = isGenderReset(message);
   const openReset = isOpenReset(message) && !genderReset;
 
@@ -255,6 +254,61 @@ export function resolveDirectionState(current, message, opts = {}) {
 
   if (current && carriesDirection(message)) return current;
   return null;
+}
+
+export function resolveDirectionState(current, message, opts = {}) {
+  const detected = detectDirection(message, opts);
+  return resolveDirectionStateFromDetected(current, message, detected);
+}
+
+function aliasCandidateText(result) {
+  if (!result) return '';
+  if (typeof result === 'string') return result;
+  return result.artist || result.canonical_artist || result.canonicalArtist || result.name || '';
+}
+
+function canonicalArtist(candidate, artistNames = []) {
+  const wanted = norm(aliasCandidateText(candidate));
+  if (!wanted) return null;
+  return artistNames.find(a => norm(a) === wanted) || null;
+}
+
+export function shouldTryArtistAlias(message) {
+  const msg = message || '';
+  if (!msg.trim()) return false;
+  if (isAcknowledgment(msg) || isOpenReset(msg)) return false;
+  if (/[A-Za-z0-9一-鿿]{1,12}(妹|哥|姐|爷|叔|团)/.test(msg)) return true;
+
+  const m = msg.match(/([A-Za-z0-9一-鿿]{1,24})的[歌曲]/);
+  if (!m) return false;
+  const token = m[1].replace(/^(来一批|来点|想听|听|放|播|推荐几首|推荐|给我|我想听)/, '');
+  if (!token || token.length > 8) return false;
+  const generic = ['晚上', '好听', '新的', '熟悉', '中文', '华语', '国语', '英文', '英语', '欧美', '韩语', '日语', '女声', '男声'];
+  return !generic.some(g => token.includes(g));
+}
+
+export async function resolveDirectionStateWithArtistAliases(current, message, opts = {}) {
+  const artistNames = opts.artistNames || [];
+  let detected = detectDirection(message, { artistNames });
+
+  if (!detected?.artists?.length && shouldTryArtistAlias(message) && opts.resolveArtistAlias) {
+    try {
+      const resolved = await opts.resolveArtistAlias(message, artistNames);
+      const artist = canonicalArtist(resolved, artistNames);
+      if (artist) {
+        detected = {
+          langMatch: detected?.langMatch || null,
+          gender: detected?.gender || null,
+          artists: [artist],
+          raw: message.trim(),
+        };
+      }
+    } catch {
+      // Alias resolution is opportunistic; unresolved aliases fall back to normal direction handling.
+    }
+  }
+
+  return resolveDirectionStateFromDetected(current, message, detected);
 }
 
 /**

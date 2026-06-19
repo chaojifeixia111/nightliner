@@ -3,7 +3,7 @@
 // 回归点:英文 EDM(非韩/日艺人)绝不能漏进 korean 方向;短 key("ive")不能子串误命中。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { songMatchesDirection, trackLang, isAcknowledgment, detectVerbatim, detectPinnedFirst, resolveDirectionState, isGenderReset } from '../server/direction.js';
+import { songMatchesDirection, trackLang, isAcknowledgment, detectVerbatim, detectPinnedFirst, resolveDirectionState, resolveDirectionStateWithArtistAliases, shouldTryArtistAlias, isGenderReset } from '../server/direction.js';
 
 const KOR = { langMatch: 'korean', gender: null, artists: [], raw: 'kpop' };
 const KOR_F = { langMatch: 'korean', gender: 'female', artists: [], raw: 'kpop女声' };
@@ -125,6 +125,49 @@ test('resolveDirectionState treats explicit artist requests as fresh hard target
   assert.equal(next.langMatch, null);
   assert.equal(next.gender, null);
   assert.deepEqual(next.artists, ['林俊杰']);
+});
+
+test('resolveDirectionStateWithArtistAliases maps common artist nicknames to canonical library artist', async () => {
+  let calls = 0;
+  const next = await resolveDirectionStateWithArtistAliases(null, '来一批A妹的歌', {
+    artistNames: ['Ariana Grande', 'Taylor Swift'],
+    resolveArtistAlias: async () => { calls++; return 'Ariana Grande'; },
+  });
+  assert.equal(calls, 1);
+  assert.equal(next.langMatch, null);
+  assert.equal(next.gender, null);
+  assert.deepEqual(next.artists, ['Ariana Grande']);
+});
+
+test('resolveDirectionStateWithArtistAliases keeps exact artist match on the local path', async () => {
+  let calls = 0;
+  const next = await resolveDirectionStateWithArtistAliases(null, '来一批Ariana Grande的歌', {
+    artistNames: ['Ariana Grande'],
+    resolveArtistAlias: async () => { calls++; return 'Taylor Swift'; },
+  });
+  assert.equal(calls, 0);
+  assert.deepEqual(next.artists, ['Ariana Grande']);
+});
+
+test('resolveDirectionStateWithArtistAliases rejects unverified alias candidates', async () => {
+  const next = await resolveDirectionStateWithArtistAliases(null, '来一批A妹的歌', {
+    artistNames: ['Taylor Swift'],
+    resolveArtistAlias: async () => 'Ariana Grande',
+  });
+  assert.equal(next, null);
+});
+
+test('artist direction matches collaborations by canonical artist', () => {
+  const dir = { langMatch: null, gender: null, artists: ['Ariana Grande'], raw: 'A妹' };
+  assert.equal(songMatchesDirection('boyfriend', 'Ariana Grande & Social House', dir), true);
+  assert.equal(songMatchesDirection('Cruel Summer', 'Taylor Swift', dir), false);
+});
+
+test('shouldTryArtistAlias catches artist-like nicknames but not generic music descriptions', () => {
+  assert.equal(shouldTryArtistAlias('来一批A妹的歌'), true);
+  assert.equal(shouldTryArtistAlias('想听断眉的歌'), true);
+  assert.equal(shouldTryArtistAlias('来点晚上的歌'), false);
+  assert.equal(shouldTryArtistAlias('推荐几首好听的歌'), false);
 });
 
 // Layer 3: 纯确认词整句 = 闲聊,不该触发重新推荐("好的" 被当 recommend → 重复推 바빠)

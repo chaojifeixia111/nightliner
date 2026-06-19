@@ -7,7 +7,7 @@
 > - **本 v0.5 = 实际落地现状**,覆盖以上二者;凡有冲突**以代码为准**。
 > **平台**:Windows 11 开发(Node 20+,纯 JS,可无缝迁 Mac)。
 > **风格**:完全私人订制,为 Elliot 一人服务,不通用化。
-> **最后更新**:2026-06-18(对话护栏:方向合并 / fresh 方向重置 / 性别硬校验 / verbatim 保序 / 确认词前置 / play 校验)。
+> **最后更新**:2026-06-19(对话护栏:方向合并 / fresh 方向重置 / 性别硬校验 / 艺人外号解析 / verbatim 保序 / 确认词前置 / play 校验)。
 
 ---
 
@@ -44,10 +44,11 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
 ```
 用户在 ChatInput 打字 → POST /api/chat {message}
   │
-  1. 确认词 + 方向解析(direction.js)
+  1. 确认词 + 方向解析(direction.js + artist-resolver.js)
   │    整句确认词("嗯/好的/ok")先短路为 chat,不调 LLM、不改 queue、不清 direction
-  │    resolveDirectionState(currentDirection, message):
+  │    resolveDirectionStateWithArtistAliases(currentDirection, message):
   │    纯续批/纠错里的 partial direction 才做 base ∩ new;新的明确语种/艺人请求重置未提维度;
+  │    点名艺人先做本地曲库精确匹配;未命中且像艺人外号("A妹"/"断眉")时,用轻量 LLM 归一化到本地艺人名单;
   │    明确"随便/放开"清空;明确"不限男女"只清性别
   │
   2. getRecommendPool()(与 RAG 并行)
@@ -127,7 +128,8 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
 
 用户点名**语种 / 性别 / 艺人**(如"国语女声"、"英文男声"、"放点孙燕姿")即为**硬约束**,本批每首都必须落在方向内;档位只决定方向内的「熟悉↔全新」配比。
 
-- **检测**:语种关键词(国语/中文/英文/韩语/日语…)+ 性别关键词(女声/男声)+ 点名艺人(匹配曲库艺人名)。
+- **检测**:语种关键词(国语/中文/英文/韩语/日语…)+ 性别关键词(女声/男声)+ 点名艺人(先匹配曲库艺人名;未命中时可走受控外号解析)。
+- **艺人外号解析(2026-06-19)**:`resolveDirectionStateWithArtistAliases` 先走确定性 `detectDirection`;只有没有匹配到本地艺人、且 `shouldTryArtistAlias(message)` 判定像艺人外号时,才调用 `artist-resolver.js`。resolver 用轻量模型做 JSON 归一化,但返回值必须满足两层校验才会变成硬方向:1) confidence 达阈值;2) canonical artist 精确存在于 `libraryArtistNames()` 返回的本地艺人列表。失败、低置信、列表外艺人、模型异常都静默回退为普通方向解析;不会因为模型知道某个外号就凭空创建不在本地库里的 artist lock。通用描述如"晚上的歌"、"好听的歌"不触发外号解析。
 - **语种判定 = `trackLang(title, artist)`:艺人语种表优先,歌名脚本兜底**(2026-06-13)。`direction.js` 内置 `ARTIST_LANG`(Elliot 真实曲库 + 反馈里的韩/日艺人:TWICE / IVE / BIGBANG / LE SSERAFIM / 米津玄師 / ONE OK ROCK…),命中即定语种,**无视拉丁标题**;查不到才退回 `songLang(title)`(歌名脚本,title-primary)。
   - **为何**:纯歌名脚本对 K-pop/J-pop 会塌——绝大多数歌名是拉丁字母("Talk that Talk"/TWICE、"Lemon"/米津玄師),被判 english,导致"韩语/日语"方向把它们全过滤掉,候选池缩到只剩歌名带谚文/假名的极少数。**实测坑:点「KPOP女声」整池只剩 1 首(바빠/SISTAR),其余全是被误杀的拉丁标题 K-pop。**修复后同请求库内候选 2→10。
   - **兜底仍保护**:未知艺人走 `songLang`,latin 标题 → english,**即使艺人含中文**——"Sad Sometimes"(黄霄雲 EDM)仍排除出"国语"。`ARTIST_LANG` 只收**确定是韩/日**的艺人,不放中/英艺人,以免污染其它方向。新增韩/日艺人往该表加(key 用 `norm()` 形式)。
@@ -182,6 +184,7 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
   - `play[]` 每首:`title, artist, reason, memoryLink, confidence, source_preference, source_pool`。其中 `title/artist/reason` 为 server 入队必填;缺失的条目由 `normalizePlayItems` 丢弃,不会进入播放解析。`source_pool` 应输出 `library|recommend|wildcard`,但缺失或非法时 server 会归一为 `wildcard`,避免因辅助标签缺失把可播队列整批丢掉。
   - `feedback_extract`(intent=feedback 时):`{target_title, target_artist, target_category, signal, reason}`。
 - **provider 路由**(`llm-adapter.js`,按 model 名前缀):`claude-*`→ claude CLI 子进程;`deepseek-*`→ DeepSeek HTTP;`qwen-*`→ DashScope HTTP。**流式仅 deepseek/qwen**(SSE);claude 无流式 → 整段拿回再一次性 emit。
+- **非聊天 JSON 小调用**:`artist-resolver.js` 复用 `callLlm(..., jsonMode:true)` 做艺人外号归一化,`trigger='artist-alias'`;它只服务方向解析,不生成 DJ 文案或队列,且结果必须被本地艺人名单校验后才会影响 `currentDirection`。
 - **每次调用全量落盘** `data/llm-calls.jsonl`:`{ts, model, trigger, prompt(JSON.stringify{system,messages}), response, duration_ms, error}`。这是 prompt 调试的关键资产。
 
 ---
@@ -307,7 +310,8 @@ WS 广播 `type`:`now` / `queue` / `tuning` / `thinking` / `dj_stream_start` / `
 server/
   index.js              Express + ws 主入口;/api/* 路由;会话态(queue/now/direction/tuning)
   context-builder.js    buildChatMessages:RAG + 档位 + 方向 + 池子 + 降权 → {system, messages, meta}
-  direction.js          方向检测/匹配/状态合并(resolveDirectionState, detectDirection, trackLang, songMatchesDirection)
+  direction.js          方向检测/匹配/状态合并(resolveDirectionStateWithArtistAliases, resolveDirectionState, detectDirection, trackLang, songMatchesDirection)
+  artist-resolver.js    受控 LLM fallback:常见艺人外号 → 本地曲库 canonical artist(必须校验 artistNames + confidence)
   chat-guards.js        chat 输出入队前纯校验(normalizePlayItems:必填字段/source_pool 归一)
   exploration-modes.js  5 档命名模式表 + modeForValue + familiarTarget
   align-batch.js        repairFamiliarNew:方向感知 + familiar/new 硬对齐(确定性换槽)
