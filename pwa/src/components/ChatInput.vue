@@ -78,7 +78,10 @@ input {
   border: none;
   background: transparent;
   color: var(--paper-1);
-  font-family: var(--font-serif);
+  /* 用本地 sans(含微软雅黑)而非远端 Noto Serif SC:CJK 衬线字体按字形子集
+     按需下载,逐字打字时每个新字会先用回退字体渲染再 swap,造成"字体扭曲+
+     不在一行+一两秒后才正常"的闪烁。本地字体即时可用,彻底消除该抖动。 */
+  font-family: var(--font-sans);
   font-size: 14px;
   outline: none;
   padding: 0;
