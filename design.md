@@ -62,6 +62,8 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   │    e. 负反馈:wrong_vibe → explore 排除 + avoid-list(skip 不再降权)
   │    f. 口味优先:librarySlice 按 songWeight(love 亲和度)降序排列;explore 种子从 lovedSeeds(4) 开始;user-turn 注入 {{LIVE_TASTE}} 块(affinity.liveTasteBlock —— 近期 love 艺人 + 歌曲,优先于静态 taste.md)
   │    g. 拼 system + 最近 5 轮 messages[] + user-turn(填入所有池子/约束)
+  │       注:注入 prompt 的 {{TS}} 走 localStamp() = Asia/Shanghai 显式格式化(`YYYY-MM-DD HH:mm GMT+8`),
+  │       不要用 toISOString()(UTC,早 8h,会把早上写成凌晨)。
   │
   4. callLlmStream(llm-adapter.js)
   │    DeepSeek SSE 流式;fence(```) 之前的 prose 逐字 WS 推为 say;整段回来后 splitSayAndJson

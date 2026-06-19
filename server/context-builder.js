@@ -21,6 +21,23 @@ const PLAYLIST_TAG = {
   945616754: 'L',  // Long Shot/Drift 后期
 };
 
+// Elliot 固定在 GMT+8。注意:Date.prototype.toISOString() 永远输出 UTC(比北京时间早 8h),
+// 会把"早上 8 点"写成"00:00Z" → LLM 读成凌晨。统一用 Asia/Shanghai 显式格式化,
+// 并带上明确时区标注,prompt 里的时间无论 server 在哪都对得上 Elliot 的钟。
+const DJ_TZ = 'Asia/Shanghai';
+export function localStamp(dt = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('zh-CN', {
+      timeZone: DJ_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false, weekday: 'short',
+    }).formatToParts(dt).map(p => [p.type, p.value])
+  );
+  return {
+    ts: `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} GMT+8`,
+    dow: parts.weekday, // zh-CN short = 周五 等,与旧数组格式一致
+  };
+}
+
 // Cache the formatted library string (loaded once)
 let _libraryCache = null;
 
@@ -223,15 +240,14 @@ export async function buildChatPrompt({ userMessage, currentQueue, n = 5, explor
   const lifeStages = await readOrEmpty('user/life-stages.md');
   const librarySlice = await buildLibrarySlice();
 
-  const now = new Date();
-  const dow = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][now.getDay()];
+  const { ts, dow } = localStamp();
   const chatHistory = recentChatTurns(5);
 
   return template
     .replace('{{DJ_PERSONA}}', djPersona || '(dj-persona.md 为空)')
     .replace('{{TASTE}}', taste || '(taste.md 尚未生成)')
     .replace('{{LIFE_STAGES}}', lifeStages || '(life-stages.md 尚未生成)')
-    .replace('{{TS}}', now.toISOString())
+    .replace('{{TS}}', ts)
     .replace('{{DOW}}', dow)
     .replace('{{RECENT_PLAYS}}', fmtPlays(recentPlays(30)))
     .replace('{{RECENT_FEEDBACK}}', fmtFeedback(recentFeedback(20)))
@@ -305,8 +321,7 @@ export async function buildChatMessages({
 
   const system = systemTpl.replace('{{DJ_PERSONA}}', djPersona || '(dj-persona.md 为空)');
 
-  const dt = new Date();
-  const dow = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][dt.getDay()];
+  const { ts, dow } = localStamp();
   // 探索系数 → 命名档位(每档一个明确配方)。池子比例直接来自档位,不再线性推导。
   const mode = modeForValue(exploration_pct);
   const libPct = mode.lib;
@@ -402,7 +417,7 @@ export async function buildChatMessages({
     .replace('{{CURRENT_QUEUE}}', currentQueue?.length
       ? currentQueue.map((s, i) => `${i + 1}. ${s.title} / ${s.artist}`).join('\n')
       : '(当前 queue 为空)')
-    .replace('{{TS}}', dt.toISOString())
+    .replace('{{TS}}', ts)
     .replace('{{DOW}}', dow)
     .replace('{{EXPLORATION_PCT}}', String(exploration_pct))
     .replace('{{MODE_NAME}}', `${mode.name} / ${mode.en}`)
