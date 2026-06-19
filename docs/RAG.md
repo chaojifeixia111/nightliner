@@ -4,7 +4,7 @@
 
 ## 一句话
 
-每次 chat：用户消息 → BGE-M3 embed → sqlite-vec 多路 top-K → 拼成 system+messages → DeepSeek 流式。**prompt 从 45KB 砍到 ~12KB。** 本手册只讲 RAG(embedding/检索/索引)那一层;探索档位 / 方向硬约束 / 反馈衰减等推荐管线见 [nightliner-design-v0.5.md](../nightliner-design-v0.5.md) §三。
+每次 chat：用户消息 → BGE-M3 embed → sqlite-vec 多路 top-K → 拼成 system+messages → DeepSeek 流式。**prompt 从 45KB 砍到 ~12KB。** 本手册只讲 RAG(embedding/检索/索引)那一层;探索档位 / 方向硬约束 / 反馈衰减等推荐管线见 [design.md](../design.md) §三。
 
 ## 系统启动时发生了什么
 

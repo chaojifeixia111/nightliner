@@ -8,11 +8,11 @@ Nightliner（夜线电台）：跑在 `localhost:8080` 的本地 PWA，在网易
 
 ## 单一事实来源
 
-**[nightliner-design-v0.5.md](nightliner-design-v0.5.md) 是 as-built 设计文档，架构问题先读它**（一次 /api/chat 全程、探索档位表、方向硬约束、RAG、LLM 契约、文件结构都在里面）。v0.3 是未落地的愿景稿，README.md 部分内容已过时（仍写着 claude-adapter / ANTHROPIC_API_KEY，实际是 deepseek + llm-adapter）——冲突时以 v0.5 和代码为准。
+**[design.md](design.md) 是 as-built 设计文档，架构问题先读它**（一次 /api/chat 全程、探索档位表、方向硬约束、RAG、LLM 契约、文件结构都在里面）。v0.3（已归档到 [docs/archive/](docs/archive/nightliner-design-v0.3.md)）是未落地的愿景稿，README.md 部分内容已过时（仍写着 claude-adapter / ANTHROPIC_API_KEY，实际是 deepseek + llm-adapter）——冲突时以 design.md 和代码为准。
 
 ## 维护纪律（每个 session 必须遵守）
 
-1. **任何改变推荐 / 方向 / 播放行为的修改，必须在同一次工作中同步更新 nightliner-design-v0.5.md 对应小节。** 文档与代码冲突时改文档。
+1. **任何改变推荐 / 方向 / 播放行为的修改，必须在同一次工作中同步更新 design.md 对应小节。** 文档与代码冲突时改文档。
 2. **每完成一个独立功能 / 修复就 commit 一次**（Conventional Commits：feat/fix/docs/chore/test，scope 常用 dj/rag），**commit 后顺手 `git push`**（远端 origin = github.com/chaojifeixia111/nightliner，私有仓库）。不要攒多个功能进一个 commit。session 结束前工作区应当干净。
 3. 改 DJ 行为优先改 `prompts/*.md`，不动代码；改探索行为看 `server/exploration-modes.js` 与 `server/direction.js`。
 

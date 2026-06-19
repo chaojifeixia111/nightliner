@@ -1,10 +1,10 @@
-# Nightliner · 夜线电台 设计文档 v0.5(as-built / 现状)
+# Nightliner · 夜线电台 设计文档(as-built / 现状)
 
 > **用途**:描述 Nightliner **当前真实实现(as-built)**,作为单一事实来源(single source of truth)。
 > **版本关系**:
-> - [v0.3](nightliner-design-v0.3.md) = 原始愿景(macOS + Apple Music + AppleScript + MediaRemote + Claude),大部分**未落地**,留作北极星。
+> - [v0.3](docs/archive/nightliner-design-v0.3.md) = 原始愿景(macOS + Apple Music + AppleScript + MediaRemote + Claude),大部分**未落地**,已归档,留作北极星。
 > - [v0.4 Windows 差分稿](docs/superpowers/specs/2026-05-08-nightliner-windows-mvp-design.md)(2026-05-08)= 转 Windows 的差分决策,平台/播放源准确,但**早于** RAG / 流式 / 探索档位 / 方向硬约束 / deepseek。
-> - **本 v0.5 = 实际落地现状**,覆盖以上二者;凡有冲突**以代码为准**。
+> - **本文 = 实际落地现状**(持续更新,版本以 git 历史为准),覆盖以上二者;凡有冲突**以代码为准**。
 > **平台**:Windows 11 开发(Node 20+,纯 JS,可无缝迁 Mac)。
 > **风格**:完全私人订制,为 Elliot 一人服务,不通用化。
 > **最后更新**:2026-06-19(对话护栏:方向合并 / fresh 方向重置 / 性别硬校验 / 艺人外号解析 / verbatim 保序 / 确认词前置 / play 校验)。

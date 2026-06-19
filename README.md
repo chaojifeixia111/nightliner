@@ -37,7 +37,7 @@ npm run chat -- "消息"     # 命令行单轮对话,不起前端
 
 ## 文档
 
-- **[nightliner-design-v0.5.md](nightliner-design-v0.5.md)** — as-built 设计文档（单一事实来源）：架构、`/api/chat` 全程、推荐引擎（5 档探索模式 / 方向硬约束 / 反馈衰减）、LLM 契约、HTTP/WS API、存储。
+- **[design.md](design.md)** — as-built 设计文档（单一事实来源）：架构、`/api/chat` 全程、推荐引擎（5 档探索模式 / 方向硬约束 / 反馈衰减）、LLM 契约、HTTP/WS API、存储。
 - **[docs/RAG.md](docs/RAG.md)** — RAG 运维手册：起服务、重建索引、看日志、手测。
 - **[docs/DEPLOY.md](docs/DEPLOY.md)** — 部署手册：家用常驻 Windows 主机 + Tailscale 私网，手机远程私有访问。
 - `docs/superpowers/` — 历次功能的 brainstorm spec 与 implementation plan（含状态标注）。
