@@ -343,6 +343,7 @@ scripts/
   cold-start.js / chat-once.js     一次性分析 / 命令行单轮
   index-all.js / test-embed.js     全量增量索引 / BGE sanity
   reindex-md.js                    强制重建手写 MD 派生索引(先删 taste/life_stage/persona/vibe_anchor 旧 chunk 再 embed;原地改 MD 正文必用,index-all 会跳过未改标题的段落)
+  reindex-songs.js                 强制重建曲库 song 索引(先删全部 song 再从 snapshot + apple md 重 embed;重导/刷新歌单必用——Apple Music 用位置序号做虚拟 id,index-all 只增不删,重排/删歌会停在旧版本)
   smoke-rag.js                     两轮端到端
   ncm-login-qr.js / ncm-fetch-playlists.js   网易云扫码登录 / 拉歌单
 
@@ -369,6 +370,7 @@ config.yaml             见 §九
 
 - **起服务 / 重建索引 / 看日志 / 手测 chat**:见 [docs/RAG.md](docs/RAG.md)。
 - **改了手写 MD(taste/life-stages/dj-persona/vibe-anchors)**:跑 `npm run reindex:md`。`index:all` 按 `路径:H2标题` 跳过已索引块且不删除,**原地改正文(标题不变)不会生效**;`reindex:md` 先清这 4 类旧 chunk 再重 embed。只新增段落/新建文件时 `index:all` 即可。
+- **刷新歌单 / 曲库**:网易云 = `npm run ncm:fetch`(需 NCM :3000 + 有效 cookie;cookie 过期先 `npm run ncm:login` 扫码,再 fetch)。Apple Music(无 API)= 浏览器打开收藏歌单页、存完整 HTML → `scripts/parse-apple-html.ps1 -InputHtml <存的.html> -OutputMd user/apple-music-favorites-2024-2026.md`。任一来源改完跑 `npm run reindex:songs` 让索引生效(**别用 `index:all`**——Apple 位置 id 只增不删,重排/删歌会停在旧版本)。
 - **改 prompt**:只改 `prompts/*.md`,不动代码。
 - **改探索行为**:`server/exploration-modes.js`(档位配方)、`server/direction.js`(方向检测/匹配)。
 - **改负反馈行为**:`server/affinity.js`(`wrongVibeSongs` / `negativeKeys`)+ `server/context-builder.js`(接线)。
