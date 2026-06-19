@@ -17,8 +17,16 @@ const USER_TURN_PATH = 'prompts/user-turn.md';
 
 // Playlist ID → chapter tag
 const PLAYLIST_TAG = {
-  160249544: 'P',  // Prelude/Long Shot 早期
-  945616754: 'L',  // Long Shot/Drift 后期
+  160249544: 'P',  // 早期听歌探索期 2014-2017
+  945616754: 'L',  // long shot 主流偏好 2017-2023
+  // 年度/主题歌单口味已接近 long shot,统一并入 L;精确年份见 user/playlists.json
+  3075520188: 'L', // 16lod, 2019 冬(高一)
+  5449646137: 'L', // 2020 年度(年底建)
+  5399412942: 'L', // 每日推荐 2020-12-27
+  7176852408: 'L', // 2021 年度(年底建)
+  7256758797: 'L', // 2021w
+  8991205498: 'L', // 2023 年度(年底建)
+  5398807385: 'L', // 第二梯队(约 2020-2021,口味近 long shot)
 };
 
 // Elliot 固定在 GMT+8。注意:Date.prototype.toISOString() 永远输出 UTC(比北京时间早 8h),
