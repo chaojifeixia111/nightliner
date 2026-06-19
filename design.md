@@ -88,6 +88,10 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   │
   8. arrangeQueue + applyChatRecommendation(queue-ops.js)更新 currentQueue / now —— 护栏:playable 为空时
   │    非 verbatim 默认打散;verbatim 保留 resolved playable 原顺序;pinnedFirst 保队首
+  │    **落队方式由 server 确定性决定(decideQueueAction),不信模型自报的 queueAction**:显式「再加几首/
+  │      接着这批加」(detectAppendRequest)→ insert_next 追加;否则换批 —— 有 now → rewrite_tail(保住在播
+  │      那首、换掉其后待播,不打断当前歌也不滚雪球),无 now → replace_all。修掉「一句『来一批X』把队列
+  │      从 30 滚到 60、和调音台 queue_length 对不上」(模型 queueAction 时灵时不灵)。
   │    **不动 queue**(防止"解析空/全无版权 → 整列被清空、now=null、播放中断"),回一句系统提示。
   │    recordQueue + recordChatTurn(异步 RAG 索引本轮)
   9. broadcast: queue / now / dj_stream_end
@@ -180,7 +184,7 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
   - `prompts/system.md`(~3KB,跨 session 不变):DJ 人格 + 推歌强约束(reason 锚 evidence / 方向硬约束 / 不重复 RECENT_PLAYS / 避讳词 / 诚实 reason 不编个人史…)+ 输出 schema。
   - `prompts/user-turn.md`(每轮变):用户消息 + now-playing + queue + **方向块** + **探索档位 + 本批 familiar/new 目标** + RAG 召回(库内/recommend/explore/反馈/taste/life-stage/vibe/语义历史)+ anti/cooldown/**降权**/RECENT_PLAYS。
   - 多轮 `messages[]`:最近 5 轮 chat_turns 回放成 user/assistant 对(近因)。
-- **prose-then-JSON**:第一步纯文本 = `say`(逐字流式);第二步 ```json``` 块 = `{intent, play[], queueAction, feedback_extract, modeUpdate}`,**不含 say**。
+- **prose-then-JSON**:第一步纯文本 = `say`(逐字流式);第二步 ```json``` 块 = `{intent, play[], queueAction, feedback_extract, modeUpdate}`,**不含 say**。(`queueAction` 模型仍可填,但 **server 不读**——落队方式由 `decideQueueAction` 按请求类型确定,见 §二 step 8。)
   - **names-only(2026-06-19,当前默认)**:recommend / feedback **不出开场白**(`say` 留空,代码块前无 prose),DJ 推歌时不开口,播放器只显示歌名/艺人/封面;chat(直接问)才正常回话。开场白是**计划中、暂时关掉**的(待其幻觉问题修好再开)。per-song `reason` 建议写短、实、不编,只进记忆;但它**不是播放入队必填**——模型在 names-only 下只给 `title/artist` 时,server 会保留为空字符串继续解析,避免整批可播歌在解析前被丢光。
   - **(开场白重启后须遵守)只说氛围/方向,不点具体歌名/艺人名/精确数量/最终顺序承诺**:`say` 先于 JSON 流出,而 `repairFamiliarNew` / 字段校验 / 版权解析 / `arrangeQueue` 可能换歌、丢歌、保序或打散——点名和数数都会和真实队列对不上。DJ 人格(声音/避讳词)见 [user/dj-persona.md](user/dj-persona.md),经 `{{DJ_PERSONA}}` 注入 system.md。
   - `intent` ∈ `recommend` / `chat` / `feedback`(+ server 端 `parse_error`)。**server 端兜底**:整句确认词("好的"/"嗯")→ LLM 前置短路为 `chat`(`isAcknowledgment`,绝不重新推荐、不记录 queueAction、不清 direction);`status=failed` → `parse_error`(不入队、不污染 chat_turns 记忆)。

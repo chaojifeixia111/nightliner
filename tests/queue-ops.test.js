@@ -1,7 +1,7 @@
 // tests/queue-ops.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sameSong, playNow, enqueue, clearUpcoming, removeFromQueue, applyChatRecommendation, arrangeQueue } from '../server/queue-ops.js';
+import { sameSong, playNow, enqueue, clearUpcoming, removeFromQueue, applyChatRecommendation, arrangeQueue, decideQueueAction } from '../server/queue-ops.js';
 
 const s = (over) => ({ title: 't', artist: 'a', ncm_id: 1, url: 'u', ...over });
 
@@ -130,6 +130,21 @@ test('applyChatRecommendation: 不修改入参队列(纯函数)', () => {
   const q = [s({ ncm_id: 1 })];
   applyChatRecommendation(q, q[0], [s({ ncm_id: 2 })], 'insert_next');
   assert.equal(q.length, 1);
+});
+
+// decideQueueAction — 服务端确定性决定落队方式,不信模型自报的 queueAction(F4 防队列滚雪球)。
+test('decideQueueAction: 默认换批 + 有 now → rewrite_tail(不打断当前歌、不滚雪球)', () => {
+  assert.equal(decideQueueAction({ append: false, hasNow: true }), 'rewrite_tail');
+});
+test('decideQueueAction: 默认换批 + 无 now → replace_all', () => {
+  assert.equal(decideQueueAction({ append: false, hasNow: false }), 'replace_all');
+});
+test('decideQueueAction: 显式追加 → insert_next(无论是否在播)', () => {
+  assert.equal(decideQueueAction({ append: true, hasNow: true }), 'insert_next');
+  assert.equal(decideQueueAction({ append: true, hasNow: false }), 'insert_next');
+});
+test('decideQueueAction: 缺省入参 → replace_all', () => {
+  assert.equal(decideQueueAction(), 'replace_all');
 });
 
 test('arrangeQueue shuffles but keeps the pinned song first', () => {

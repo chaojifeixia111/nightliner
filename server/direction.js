@@ -164,6 +164,14 @@ export function detectVerbatim(message) {
   return /每日推荐/.test(m) && VERBATIM_CUE.test(m);
 }
 
+// 显式「在现有队列后面加歌」的意图(而非换一批)。只有命中才允许 insert_next 追加;否则服务端
+// 默认换批(rewrite_tail / replace_all),避免新方向被塞到旧队列后面、队列越滚越长(F4)。
+// 保守起见只认明确的追加词,「下一批 / 再来一批 / 换一批 / 来一批X」都不算追加(它们是换批)。
+const APPEND_CUE = /(再加|多加|加点|加几首|加[一二三四五六七八九十两\d]+首|加到(后面|队尾|最后)|往(后|队尾)(加|排|塞)|队尾再?加|append)/;
+export function detectAppendRequest(message) {
+  return APPEND_CUE.test(message || '');
+}
+
 // 点名头部:"第一首(歌/我要)?(放|要|是|听|来|播…) X" —— 容忍中间的「歌/我/我要」等字。
 const PIN_FIRST = /第一首[歌曲]?\s*(我?要听|我要|放|要|是|听|来|播|给|用|先|得|换成)/;
 export function detectPinnedFirst(message) {

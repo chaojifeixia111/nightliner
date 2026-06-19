@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { buildChatMessages, libraryArtistNames } from './context-builder.js';
 import { repairFamiliarNew } from './align-batch.js';
-import { carriesDirection, describeDirection, detectVerbatim, isAcknowledgment, detectPinnedFirst, resolveDirectionStateWithArtistAliases } from './direction.js';
+import { carriesDirection, describeDirection, detectVerbatim, isAcknowledgment, detectPinnedFirst, detectAppendRequest, resolveDirectionStateWithArtistAliases } from './direction.js';
 import { callLlmStream } from './llm-adapter.js';
 import { makeArtistAliasResolver } from './artist-resolver.js';
 import { resolvePlayList, resolveById } from './playback-coordinator.js';
@@ -17,7 +17,7 @@ import { warmup } from './embedder.js';
 import { indexAllSongs, indexAllFeedback, indexAllChatTurns, indexMdFile } from './indexer.js';
 import { checkReasonHallucination } from './budget-enforcer.js';
 import { normalizeSearchSongs, normalizeSearchArtists, normalizeArtistSongs } from './search-normalize.js';
-import { playNow, enqueue, clearUpcoming, removeFromQueue, sameSong, applyChatRecommendation, arrangeQueue } from './queue-ops.js';
+import { playNow, enqueue, clearUpcoming, removeFromQueue, sameSong, applyChatRecommendation, arrangeQueue, decideQueueAction } from './queue-ops.js';
 import { buildPlaylist, plKey } from './playlist-builder.js';
 import { buildExplorePool, songKey } from './explore-pool.js';
 import { songAffinity, artistAffinity, songWeight, lovedSeeds, graduatedLibrary, negativeSongs } from './affinity.js';
@@ -286,6 +286,7 @@ app.post('/api/chat', async (req, res) => {
     // Memory tracking
     let recordedPlayTitles = [];
     let recordedFeedback = null;
+    let recordedQueueAction = null;
 
     if (intent === 'parse_error') {
       // 修复 + 重问都失败:不执行任何队列动作,如实告诉用户而不是装作聊了天
@@ -357,9 +358,15 @@ app.post('/api/chat', async (req, res) => {
         else if (sp === 'recommend') recommendHits++;
         else wildcard++;
       }
-      console.log(`[chat] queueAction=${parsed.queueAction}, library_hits=${library_hits}/${plays.length}`);
+      // F4:不信模型自报的 queueAction(它会随手用 insert_next 把新批追加到旧队列后面 →
+      // 队列滚雪球、和调音台长度对不上)。服务端按请求类型确定性决定:显式「再加」才追加,
+      // 否则换批(有 now → rewrite_tail 保住在播那首、换掉待播;无 now → replace_all)。
+      const queueAction = decideQueueAction({ append: detectAppendRequest(message), hasNow: !!now });
+      recordedQueueAction = queueAction;
+      const overrode = parsed.queueAction && parsed.queueAction !== queueAction ? `(模型自报 ${parsed.queueAction} → 覆盖)` : '';
+      console.log(`[chat] queueAction=${queueAction}${overrode}, library_hits=${library_hits}/${plays.length}`);
 
-      const applied = applyChatRecommendation(currentQueue, now, arranged, parsed.queueAction);
+      const applied = applyChatRecommendation(currentQueue, now, arranged, queueAction);
       currentQueue = applied.queue;
       now = applied.now;
 
@@ -437,7 +444,7 @@ app.post('/api/chat', async (req, res) => {
       intent,
       dj_say: say,
       play_titles_json: JSON.stringify(recordedPlayTitles),
-      queue_action: parsed.queueAction || null,
+      queue_action: recordedQueueAction || null,
       feedback_extract_json: recordedFeedback ? JSON.stringify(recordedFeedback) : null,
       context_now_title: now?.title || null,
       context_now_artist: now?.artist || null,

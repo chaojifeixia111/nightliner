@@ -111,4 +111,4 @@
     "signal": "love|wrong_vibe|too_familiar|never_again", "reason": "..." }
   ```
 
-`queueAction`: `null` / `"rewrite_tail"` / `"insert_next"` / `"replace_all"`
+`queueAction`: `null` / `"rewrite_tail"` / `"insert_next"` / `"replace_all"` —— **服务端不读这个字段**,它按请求类型自己决定落队方式(换一批/新方向 = 替换待播、不追加;只有用户明确说「再加几首/接着这批加」才追加)。填 `null` 即可,别为「加在哪」纠结。

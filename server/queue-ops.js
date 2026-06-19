@@ -53,6 +53,17 @@ export function applyChatRecommendation(queue, now, playable, queueAction) {
   return { queue: [...playable], now: playable[0], changed: true };
 }
 
+// chat 推荐如何落队的确定性决策。**不信模型自报的 queueAction** —— 它时灵时不灵,会随手用
+// insert_next 把新批追加到旧队列后面 → 队列越滚越长、和调音台的 queue_length 对不上(实测一句
+// 「来一批X」能把队列从 30 滚到 60)。服务端按请求类型定:
+//   - 显式「再加 / 接着这批加几首」(append=true)→ insert_next:追加,保住旧队列。
+//   - 否则(换一批 / 新方向 / 下一批):有 now → rewrite_tail(保住正在播的那首、换掉其后待播,
+//     既不打断当前歌也不滚雪球);无 now → replace_all。
+export function decideQueueAction({ append = false, hasNow = false } = {}) {
+  if (append) return 'insert_next';
+  return hasNow ? 'rewrite_tail' : 'replace_all';
+}
+
 // 给 chat 推荐队列排序:整体打散(避免「前面全是听过的」);pinnedFirst 时保住头部那首。
 export function arrangeQueue(playable, { pinnedFirst = false, verbatim = false, rng = Math.random } = {}) {
   const arr = [...playable];

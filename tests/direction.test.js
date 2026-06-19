@@ -3,7 +3,7 @@
 // 回归点:英文 EDM(非韩/日艺人)绝不能漏进 korean 方向;短 key("ive")不能子串误命中。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { songMatchesDirection, trackLang, isAcknowledgment, detectVerbatim, detectPinnedFirst, resolveDirectionState, resolveDirectionStateWithArtistAliases, shouldTryArtistAlias, isGenderReset } from '../server/direction.js';
+import { songMatchesDirection, trackLang, isAcknowledgment, detectVerbatim, detectPinnedFirst, resolveDirectionState, resolveDirectionStateWithArtistAliases, shouldTryArtistAlias, isGenderReset, detectAppendRequest } from '../server/direction.js';
 
 const KOR = { langMatch: 'korean', gender: null, artists: [], raw: 'kpop' };
 const KOR_F = { langMatch: 'korean', gender: 'female', artists: [], raw: 'kpop女声' };
@@ -37,6 +37,18 @@ test('known female K-pop artists do not satisfy male direction', () => {
 
 test('unknown gender stays allowed after language match', () => {
   assert.equal(songMatchesDirection('노래', 'Unknown K Artist', KOR_F), true);
+});
+
+// detectAppendRequest — 只有明确的「追加」词才返回 true;换批/续批一律 false(走默认换批)。
+test('detectAppendRequest: 显式追加意图命中', () => {
+  for (const m of ['再加几首', '多加两首华语', '加三首慢的', '加点轻快的', '加到队尾', '往后再加点', '加到后面']) {
+    assert.equal(detectAppendRequest(m), true, m);
+  }
+});
+test('detectAppendRequest: 换批/续批/普通方向不命中(应默认换批,不追加)', () => {
+  for (const m of ['来一批徐佳莹的歌', '下一批', '再来一批', '来一批华语流行', '换一批', '随便放一批', '第一首放偏爱']) {
+    assert.equal(detectAppendRequest(m), false, m);
+  }
 });
 
 test('partially-known collaborations are not hard rejected by gender', () => {
