@@ -7,7 +7,7 @@
 > - **本文 = 实际落地现状**(持续更新,版本以 git 历史为准),覆盖以上二者;凡有冲突**以代码为准**。
 > **平台**:Windows 11 开发(Node 20+,纯 JS,可无缝迁 Mac)。
 > **风格**:完全私人订制,为 Elliot 一人服务,不通用化。
-> **最后更新**:2026-06-19(对话护栏:方向合并 / fresh 方向重置 / 性别硬校验 / 艺人外号解析 / verbatim 保序 / 确认词前置 / play 校验)。
+> **最后更新**:2026-06-19(对话护栏:方向合并 / fresh 方向重置 / 性别硬校验 / 艺人外号解析 / names-only 入队兼容 / verbatim 保序 / 确认词前置 / play 校验)。
 
 ---
 
@@ -73,7 +73,7 @@ DeepSeek API 是远端(OpenAI 兼容,SSE 流式)。`.env` 提供 `DEEPSEEK_API_K
   │    chat_turns 如实记 parse_error(不污染记忆),绝不静默吞。
   │
   5. normalizePlayItems(chat-guards.js) + repairFamiliarNew(align-batch.js)— 确定性对齐,不重试(零延迟)
-  │    play[] 缺 title/artist/reason → 丢弃,不进播放解析;source_pool 缺失或非法 → 归一为 wildcard;
+  │    play[] 缺 title/artist → 丢弃,不进播放解析;reason 缺失保留为空;source_pool 缺失或非法 → 归一为 wildcard;
   │    跨方向的歌换成方向内候选(新→库内),换不到就丢弃(宁短勿偏,queue 可短);
   │    familiar/new 硬对齐在**非 verbatim** 时执行——含方向 turn(2026-06-17 起方向也尊重探索
   │    档位,用方向内候选拉「全新」)。verbatim(「直接放每日推荐」)整步跳过;
@@ -179,10 +179,10 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
   - `prompts/user-turn.md`(每轮变):用户消息 + now-playing + queue + **方向块** + **探索档位 + 本批 familiar/new 目标** + RAG 召回(库内/recommend/explore/反馈/taste/life-stage/vibe/语义历史)+ anti/cooldown/**降权**/RECENT_PLAYS。
   - 多轮 `messages[]`:最近 5 轮 chat_turns 回放成 user/assistant 对(近因)。
 - **prose-then-JSON**:第一步纯文本 = `say`(逐字流式);第二步 ```json``` 块 = `{intent, play[], queueAction, feedback_extract, modeUpdate}`,**不含 say**。
-  - **names-only(2026-06-19,当前默认)**:recommend / feedback **不出开场白**(`say` 留空,代码块前无 prose),DJ 推歌时不开口,播放器只显示歌名/艺人/封面;chat(直接问)才正常回话。开场白是**计划中、暂时关掉**的(待其幻觉问题修好再开)。per-song `reason` 仍 server 必填(缺则丢歌),但**前端并未渲染它**(`system.md` 旧称"逐首字幕"实为 stale——`pwa/src` 无任何组件展示 `play[].reason`),只进记忆;写短、实、不编。
+  - **names-only(2026-06-19,当前默认)**:recommend / feedback **不出开场白**(`say` 留空,代码块前无 prose),DJ 推歌时不开口,播放器只显示歌名/艺人/封面;chat(直接问)才正常回话。开场白是**计划中、暂时关掉**的(待其幻觉问题修好再开)。per-song `reason` 建议写短、实、不编,只进记忆;但它**不是播放入队必填**——模型在 names-only 下只给 `title/artist` 时,server 会保留为空字符串继续解析,避免整批可播歌在解析前被丢光。
   - **(开场白重启后须遵守)只说氛围/方向,不点具体歌名/艺人名/精确数量/最终顺序承诺**:`say` 先于 JSON 流出,而 `repairFamiliarNew` / 字段校验 / 版权解析 / `arrangeQueue` 可能换歌、丢歌、保序或打散——点名和数数都会和真实队列对不上。DJ 人格(声音/避讳词)见 [user/dj-persona.md](user/dj-persona.md),经 `{{DJ_PERSONA}}` 注入 system.md。
   - `intent` ∈ `recommend` / `chat` / `feedback`(+ server 端 `parse_error`)。**server 端兜底**:整句确认词("好的"/"嗯")→ LLM 前置短路为 `chat`(`isAcknowledgment`,绝不重新推荐、不记录 queueAction、不清 direction);`status=failed` → `parse_error`(不入队、不污染 chat_turns 记忆)。
-  - `play[]` 每首:`title, artist, reason, memoryLink, confidence, source_preference, source_pool`。其中 `title/artist/reason` 为 server 入队必填;缺失的条目由 `normalizePlayItems` 丢弃,不会进入播放解析。`source_pool` 应输出 `library|recommend|wildcard`,但缺失或非法时 server 会归一为 `wildcard`,避免因辅助标签缺失把可播队列整批丢掉。
+  - `play[]` 每首:`title, artist, reason, memoryLink, confidence, source_preference, source_pool`。其中 `title/artist` 为 server 入队必填;缺失的条目由 `normalizePlayItems` 丢弃,不会进入播放解析。`reason` 缺失时归一为空字符串,不阻断播放;`source_pool` 应输出 `library|recommend|wildcard`,但缺失或非法时 server 会归一为 `wildcard`,避免因辅助标签缺失把可播队列整批丢掉。
   - `feedback_extract`(intent=feedback 时):`{target_title, target_artist, target_category, signal, reason}`。
 - **provider 路由**(`llm-adapter.js`,按 model 名前缀):`claude-*`→ claude CLI 子进程;`deepseek-*`→ DeepSeek HTTP;`qwen-*`→ DashScope HTTP。**流式仅 deepseek/qwen**(SSE);claude 无流式 → 整段拿回再一次性 emit。
 - **非聊天 JSON 小调用**:`artist-resolver.js` 复用 `callLlm(..., jsonMode:true)` 做艺人外号归一化,`trigger='artist-alias'`;它只服务方向解析,不生成 DJ 文案或队列,且结果必须被本地艺人名单校验后才会影响 `currentDirection`。

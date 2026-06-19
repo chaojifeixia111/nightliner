@@ -17,7 +17,7 @@ export function normalizePlayItems(items) {
     const rawSourcePool = cleanString(item?.source_pool);
     const source_pool = VALID_SOURCE_POOLS.has(rawSourcePool) ? rawSourcePool : DEFAULT_SOURCE_POOL;
 
-    if (!title || !artist || !reason) {
+    if (!title || !artist) {
       dropped++;
       continue;
     }

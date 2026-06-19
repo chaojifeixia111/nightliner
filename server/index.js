@@ -294,8 +294,8 @@ app.post('/api/chat', async (req, res) => {
       console.warn('[chat] parse_error: JSON 修复+json_object 重问均失败,本轮未执行');
 
     } else if (intent === 'recommend') {
-      // Resolve play list → NCM URLs. Missing title/artist/reason is malformed output;
-      // source_pool is normalized by chat-guards because playback does not depend on that label.
+      // Resolve play list → NCM URLs. Missing title/artist is malformed output;
+      // reason/source_pool are normalized by chat-guards because playback does not depend on them.
       const rawPlays = Array.isArray(parsed.play) ? parsed.play : [];
       const normalized = normalizePlayItems(rawPlays);
       const plays = normalized.plays;
