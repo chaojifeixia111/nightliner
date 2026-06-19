@@ -341,6 +341,7 @@ pwa/src/                Vue3 + Vite(见 §八)
 scripts/
   cold-start.js / chat-once.js     一次性分析 / 命令行单轮
   index-all.js / test-embed.js     全量增量索引 / BGE sanity
+  reindex-md.js                    强制重建手写 MD 派生索引(先删 taste/life_stage/mood_rule/persona/vibe_anchor 旧 chunk 再 embed;原地改 MD 正文必用,index-all 会跳过未改标题的段落)
   smoke-rag.js                     两轮端到端
   ncm-login-qr.js / ncm-fetch-playlists.js   网易云扫码登录 / 拉歌单
 
@@ -365,6 +366,7 @@ config.yaml             见 §九
 ## 十二、运维速查
 
 - **起服务 / 重建索引 / 看日志 / 手测 chat**:见 [docs/RAG.md](docs/RAG.md)。
+- **改了手写 MD(taste/life-stages/mood-rules/dj-persona/vibe-anchors)**:跑 `npm run reindex:md`。`index:all` 按 `路径:H2标题` 跳过已索引块且不删除,**原地改正文(标题不变)不会生效**;`reindex:md` 先清这 5 类旧 chunk 再重 embed。只新增段落/新建文件时 `index:all` 即可。
 - **改 prompt**:只改 `prompts/*.md`,不动代码。
 - **改探索行为**:`server/exploration-modes.js`(档位配方)、`server/direction.js`(方向检测/匹配)。
 - **改负反馈行为**:`server/affinity.js`(`wrongVibeSongs` / `negativeKeys`)+ `server/context-builder.js`(接线)。

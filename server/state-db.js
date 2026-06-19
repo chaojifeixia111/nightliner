@@ -295,6 +295,18 @@ export function deleteEmbeddingsBySource(source_type, source_id) {
   tx();
 }
 
+export function deleteEmbeddingsBySourceType(source_type) {
+  const tx = db.transaction(() => {
+    const rows = db.prepare(`SELECT id FROM embeddings WHERE source_type = ?`).all(source_type);
+    for (const r of rows) {
+      db.prepare(`DELETE FROM vec_embeddings WHERE embedding_id = ?`).run(BigInt(r.id));
+    }
+    db.prepare(`DELETE FROM embeddings WHERE source_type = ?`).run(source_type);
+    return rows.length;
+  });
+  return tx();
+}
+
 export function countEmbeddings(source_type) {
   if (source_type) {
     return db.prepare(`SELECT COUNT(*) as c FROM embeddings WHERE source_type = ?`).get(source_type).c;

@@ -14,7 +14,8 @@
     "chat": "node --env-file=.env scripts/chat-once.js",
     "test": "node --env-file=.env --test --test-concurrency=1 \"tests/**/*.test.js\"",
     "test:embed": "node --env-file=.env scripts/test-embed.js",
-    "index:all": "node --env-file=.env scripts/index-all.js"
+    "index:all": "node --env-file=.env scripts/index-all.js",
+    "reindex:md": "node --env-file=.env scripts/reindex-md.js"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
