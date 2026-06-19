@@ -785,7 +785,6 @@ server.listen(PORT, config.server.host, async () => {
   const mdTargets = [
     ['user/taste.md', 'taste'],
     ['user/life-stages.md', 'life_stage'],
-    ['user/mood-rules.md', 'mood_rule'],
     ['user/dj-persona.md', 'persona'],
     ['user/vibe-anchors.md', 'vibe_anchor'],
   ];

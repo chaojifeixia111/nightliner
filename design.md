@@ -176,7 +176,7 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
 
 - **prompt 拆分**(RAG 后,触发 DeepSeek prefix cache):
   - `prompts/system.md`(~3KB,跨 session 不变):DJ 人格 + 推歌强约束(reason 锚 evidence / 方向硬约束 / 不重复 RECENT_PLAYS / 避讳词 / 诚实 reason 不编个人史…)+ 输出 schema。
-  - `prompts/user-turn.md`(每轮变):用户消息 + now-playing + queue + **方向块** + **探索档位 + 本批 familiar/new 目标** + RAG 召回(库内/recommend/explore/反馈/taste/life-stage/mood/vibe/语义历史)+ anti/cooldown/**降权**/RECENT_PLAYS。
+  - `prompts/user-turn.md`(每轮变):用户消息 + now-playing + queue + **方向块** + **探索档位 + 本批 familiar/new 目标** + RAG 召回(库内/recommend/explore/反馈/taste/life-stage/vibe/语义历史)+ anti/cooldown/**降权**/RECENT_PLAYS。
   - 多轮 `messages[]`:最近 5 轮 chat_turns 回放成 user/assistant 对(近因)。
 - **prose-then-JSON**:第一步纯文本 = `say`(逐字流式);第二步 ```json``` 块 = `{intent, play[], queueAction, feedback_extract, modeUpdate}`,**不含 say**。
   - **names-only(2026-06-19,当前默认)**:recommend / feedback **不出开场白**(`say` 留空,代码块前无 prose),DJ 推歌时不开口,播放器只显示歌名/艺人/封面;chat(直接问)才正常回话。开场白是**计划中、暂时关掉**的(待其幻觉问题修好再开)。per-song `reason` 仍 server 必填(缺则丢歌),但**前端并未渲染它**(`system.md` 旧称"逐首字幕"实为 stale——`pwa/src` 无任何组件展示 `play[].reason`),只进记忆;写短、实、不编。
@@ -342,7 +342,7 @@ pwa/src/                Vue3 + Vite(见 §八)
 scripts/
   cold-start.js / chat-once.js     一次性分析 / 命令行单轮
   index-all.js / test-embed.js     全量增量索引 / BGE sanity
-  reindex-md.js                    强制重建手写 MD 派生索引(先删 taste/life_stage/mood_rule/persona/vibe_anchor 旧 chunk 再 embed;原地改 MD 正文必用,index-all 会跳过未改标题的段落)
+  reindex-md.js                    强制重建手写 MD 派生索引(先删 taste/life_stage/persona/vibe_anchor 旧 chunk 再 embed;原地改 MD 正文必用,index-all 会跳过未改标题的段落)
   smoke-rag.js                     两轮端到端
   ncm-login-qr.js / ncm-fetch-playlists.js   网易云扫码登录 / 拉歌单
 
@@ -359,6 +359,7 @@ config.yaml             见 §九
 - Profile 视图(观察卡片审核 / 章节渲染 / 规则编辑)
 - Consolidation pass(周度收敛 → taste/mood/life-stages diff)
 - mode chips(人生场景预设)/ Apple privacy ZIP 冷启动 / 自动 life-stages 切分
+- **mood-rules.md(心境→音乐静态映射规则):2026-06-19 移除**。改为运行时直接跟 DJ 说当下心情("今天心情不好,给我一批"),靠 agent 临场选曲,不再维护静态映射文件。`mood_rule` source_type、`{{MOOD_RULE_SLICE}}` / `{{MOOD_RULES}}` 注入、retriever budget、index 目标全部删除。代价:agent 只有心情的**常规读法**(心情不好→偏轻柔);若有反直觉映射(如亏钱日想听燃的),需当场说明。
 
 这些大多是**迁 Mac 后**或后续要做的,不是被否决——只是当前 Windows 窗口期未建。
 
@@ -367,7 +368,7 @@ config.yaml             见 §九
 ## 十二、运维速查
 
 - **起服务 / 重建索引 / 看日志 / 手测 chat**:见 [docs/RAG.md](docs/RAG.md)。
-- **改了手写 MD(taste/life-stages/mood-rules/dj-persona/vibe-anchors)**:跑 `npm run reindex:md`。`index:all` 按 `路径:H2标题` 跳过已索引块且不删除,**原地改正文(标题不变)不会生效**;`reindex:md` 先清这 5 类旧 chunk 再重 embed。只新增段落/新建文件时 `index:all` 即可。
+- **改了手写 MD(taste/life-stages/dj-persona/vibe-anchors)**:跑 `npm run reindex:md`。`index:all` 按 `路径:H2标题` 跳过已索引块且不删除,**原地改正文(标题不变)不会生效**;`reindex:md` 先清这 4 类旧 chunk 再重 embed。只新增段落/新建文件时 `index:all` 即可。
 - **改 prompt**:只改 `prompts/*.md`,不动代码。
 - **改探索行为**:`server/exploration-modes.js`(档位配方)、`server/direction.js`(方向检测/匹配)。
 - **改负反馈行为**:`server/affinity.js`(`wrongVibeSongs` / `negativeKeys`)+ `server/context-builder.js`(接线)。

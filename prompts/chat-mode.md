@@ -31,9 +31,6 @@
 ### taste.md
 {{TASTE}}
 
-### mood-rules.md
-{{MOOD_RULES}}
-
 ### life-stages.md
 {{LIFE_STAGES}}
 

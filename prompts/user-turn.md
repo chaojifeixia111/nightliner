@@ -45,9 +45,6 @@
 ### 相关 life-stages 片段
 {{LIFE_STAGE_SLICE}}
 
-### 相关 mood-rules 片段
-{{MOOD_RULE_SLICE}}
-
 ### 相关 vibe-anchors 片段
 {{VIBE_ANCHOR_SLICE}}
 

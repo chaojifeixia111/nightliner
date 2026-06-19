@@ -220,7 +220,6 @@ export async function buildChatPrompt({ userMessage, currentQueue, n = 5, explor
   const template = await fs.readFile(TEMPLATE_PATH, 'utf8');
   const djPersona = await readOrEmpty('user/dj-persona.md');
   const taste = await readOrEmpty('user/taste.md');
-  const moodRules = await readOrEmpty('user/mood-rules.md');
   const lifeStages = await readOrEmpty('user/life-stages.md');
   const librarySlice = await buildLibrarySlice();
 
@@ -231,7 +230,6 @@ export async function buildChatPrompt({ userMessage, currentQueue, n = 5, explor
   return template
     .replace('{{DJ_PERSONA}}', djPersona || '(dj-persona.md 为空)')
     .replace('{{TASTE}}', taste || '(taste.md 尚未生成)')
-    .replace('{{MOOD_RULES}}', moodRules || '(mood-rules.md 为空,从空开始)')
     .replace('{{LIFE_STAGES}}', lifeStages || '(life-stages.md 尚未生成)')
     .replace('{{TS}}', now.toISOString())
     .replace('{{DOW}}', dow)
@@ -300,7 +298,7 @@ export async function buildChatMessages({
     retrieveContext({
       userMessage: retrievalQuery,
       recentTurns: [],
-      budgets: { song: 18, feedback: 8, life_stage: 3, taste: 3, mood_rule: 2, vibe_anchor: 5, chat_turn: 3 },
+      budgets: { song: 18, feedback: 8, life_stage: 3, taste: 3, vibe_anchor: 5, chat_turn: 3 },
     }),
     Promise.resolve(recommendPool), // 可传 array 或 promise
   ]);
@@ -431,7 +429,6 @@ export async function buildChatMessages({
     .replace('{{FEEDBACK_SLICE}}', fmtFeedbackRag(retrieved.feedback))
     .replace('{{TASTE_SLICE}}', fmtSnippets(retrieved.taste_snippets))
     .replace('{{LIFE_STAGE_SLICE}}', fmtSnippets(retrieved.life_stage_snippets))
-    .replace('{{MOOD_RULE_SLICE}}', fmtSnippets(retrieved.mood_rule_snippets))
     .replace('{{VIBE_ANCHOR_SLICE}}', fmtSnippets(retrieved.vibe_anchor_snippets, '(vibe-anchors.md 不存在或无相关)'))
     .replace('{{SEMANTIC_HISTORY}}', fmtSnippets(retrieved.semantic_history))
     .replace('{{ANTI_LIST}}', fmtSongList(antiList()))

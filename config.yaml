@@ -55,7 +55,6 @@ rag:
     feedback_top_k: 8     # 反馈召回
     life_stage_top_k: 3
     taste_top_k: 3
-    mood_rule_top_k: 2
     vibe_anchor_top_k: 5
     chat_turn_top_k: 3    # 语义历史轮 (近因仍走 messages[] 多轮回放)
   embedding:

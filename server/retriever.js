@@ -8,7 +8,6 @@ const DEFAULT_BUDGETS = {
   feedback: 8,
   life_stage: 3,
   taste: 3,
-  mood_rule: 2,
   persona: 1,
   vibe_anchor: 5,
   chat_turn: 3,
@@ -22,7 +21,6 @@ export async function retrieveContext({ userMessage, recentTurns = [], budgets =
   const fbRows = B.feedback ? searchSimilar({ embedding: queryVec, source_type: 'feedback', top_k: B.feedback }) : [];
   const lsRows = B.life_stage ? searchSimilar({ embedding: queryVec, source_type: 'life_stage', top_k: B.life_stage }) : [];
   const tasteRows = B.taste ? searchSimilar({ embedding: queryVec, source_type: 'taste', top_k: B.taste }) : [];
-  const moodRows = B.mood_rule ? searchSimilar({ embedding: queryVec, source_type: 'mood_rule', top_k: B.mood_rule }) : [];
   const vibeRows = B.vibe_anchor ? searchSimilar({ embedding: queryVec, source_type: 'vibe_anchor', top_k: B.vibe_anchor }) : [];
   const turnRows = B.chat_turn ? searchSimilar({ embedding: queryVec, source_type: 'chat_turn', top_k: B.chat_turn }) : [];
 
@@ -43,7 +41,6 @@ export async function retrieveContext({ userMessage, recentTurns = [], budgets =
     })),
     life_stage_snippets: lsRows.map(r => r.chunk_text),
     taste_snippets: tasteRows.map(r => r.chunk_text),
-    mood_rule_snippets: moodRows.map(r => r.chunk_text),
     vibe_anchor_snippets: vibeRows.map(r => r.chunk_text),
     semantic_history: turnRows.map(r => r.chunk_text),
     recent_history: recentTurns,    // 近因优先,调用方传入
