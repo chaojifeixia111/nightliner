@@ -239,7 +239,9 @@ function bodyClass(msg) {
   white-space: pre-line;
 }
 .user-body, .reaction-body {
-  font-style: italic;
+  /* 不用斜体:Noto Serif SC 无斜体字形,浏览器只能整体剪切倾斜方块字/假名/谚文,
+     看着别扭。靠左侧 rule 边线 + 更淡的 paper-3 + 更小字号区分用户消息即可。 */
+  font-style: normal;
   font-size: 14px;
   color: var(--paper-3);
   border-left: 2px solid var(--rule);
