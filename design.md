@@ -179,7 +179,8 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
   - `prompts/user-turn.md`(每轮变):用户消息 + now-playing + queue + **方向块** + **探索档位 + 本批 familiar/new 目标** + RAG 召回(库内/recommend/explore/反馈/taste/life-stage/mood/vibe/语义历史)+ anti/cooldown/**降权**/RECENT_PLAYS。
   - 多轮 `messages[]`:最近 5 轮 chat_turns 回放成 user/assistant 对(近因)。
 - **prose-then-JSON**:第一步纯文本 = `say`(逐字流式);第二步 ```json``` 块 = `{intent, play[], queueAction, feedback_extract, modeUpdate}`,**不含 say**。
-  - **开场白只说氛围/方向,不点具体歌名/艺人名/精确数量/最终顺序承诺**:`say` 先于 JSON 流出,而 `repairFamiliarNew` / 字段校验 / 版权解析 / `arrangeQueue` 可能换歌、丢歌、保序或打散——点名和数数都会和真实队列对不上(prompt 约束;每首"为什么"放 per-song `reason`,播放时逐首显示)。
+  - **names-only(2026-06-19,当前默认)**:recommend / feedback **不出开场白**(`say` 留空,代码块前无 prose),DJ 推歌时不开口,播放器只显示歌名/艺人/封面;chat(直接问)才正常回话。开场白是**计划中、暂时关掉**的(待其幻觉问题修好再开)。per-song `reason` 仍 server 必填(缺则丢歌),但**前端并未渲染它**(`system.md` 旧称"逐首字幕"实为 stale——`pwa/src` 无任何组件展示 `play[].reason`),只进记忆;写短、实、不编。
+  - **(开场白重启后须遵守)只说氛围/方向,不点具体歌名/艺人名/精确数量/最终顺序承诺**:`say` 先于 JSON 流出,而 `repairFamiliarNew` / 字段校验 / 版权解析 / `arrangeQueue` 可能换歌、丢歌、保序或打散——点名和数数都会和真实队列对不上。DJ 人格(声音/避讳词)见 [user/dj-persona.md](user/dj-persona.md),经 `{{DJ_PERSONA}}` 注入 system.md。
   - `intent` ∈ `recommend` / `chat` / `feedback`(+ server 端 `parse_error`)。**server 端兜底**:整句确认词("好的"/"嗯")→ LLM 前置短路为 `chat`(`isAcknowledgment`,绝不重新推荐、不记录 queueAction、不清 direction);`status=failed` → `parse_error`(不入队、不污染 chat_turns 记忆)。
   - `play[]` 每首:`title, artist, reason, memoryLink, confidence, source_preference, source_pool`。其中 `title/artist/reason` 为 server 入队必填;缺失的条目由 `normalizePlayItems` 丢弃,不会进入播放解析。`source_pool` 应输出 `library|recommend|wildcard`,但缺失或非法时 server 会归一为 `wildcard`,避免因辅助标签缺失把可播队列整批丢掉。
   - `feedback_extract`(intent=feedback 时):`{target_title, target_artist, target_category, signal, reason}`。
