@@ -4,7 +4,7 @@
 import { songKey, buildExplorePool } from './explore-pool.js';
 import { songWeight, songAffinity, artistAffinity } from './affinity.js';
 import * as ncm from './ncm-client.js';
-import { directionQuery } from './direction.js';
+import { directionQuery, playlistQuery } from './direction.js';
 
 // 纯函数:混合 near/far,去重(库内/排除集/跨档),按 affinity*噪声 重排。
 export function blendDiscovery({ near = [], far = [], mode, libKeys = new Set(), excludeKeys = new Set(), limit = 24, songAff, artistAff, rng = Math.random }) {
@@ -55,7 +55,9 @@ export async function buildFarTier({ direction, lovedArtists = [], playlistCap =
   const out = [];
   try {
     if (direction) {
-      const kw = directionQuery(direction);
+      // 用 playlistQuery(口语题材词,命中千万级大歌单)而非 directionQuery(空格拼语种词,只命中
+      // 小众单)—— 这是「华语流行只给到一小撮冷门网络歌手」的根因修复(F5)。
+      const kw = playlistQuery(direction) || directionQuery(direction);
       const res = await deps.searchPlaylists(kw, { limit: 8 });
       const pls = (res?.result?.playlists || []).sort((a, b) => (b.playCount || 0) - (a.playCount || 0)).slice(0, playlistCap);
       const tracks = await Promise.allSettled(pls.map(p => deps.playlistTrackAll(p.id, { limit: perPlaylist })));

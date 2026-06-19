@@ -3,7 +3,7 @@
 // 回归点:英文 EDM(非韩/日艺人)绝不能漏进 korean 方向;短 key("ive")不能子串误命中。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { songMatchesDirection, trackLang, isAcknowledgment, detectVerbatim, detectPinnedFirst, resolveDirectionState, resolveDirectionStateWithArtistAliases, shouldTryArtistAlias, isGenderReset, detectAppendRequest } from '../server/direction.js';
+import { songMatchesDirection, trackLang, isAcknowledgment, detectVerbatim, detectPinnedFirst, resolveDirectionState, resolveDirectionStateWithArtistAliases, shouldTryArtistAlias, isGenderReset, detectAppendRequest, playlistQuery } from '../server/direction.js';
 
 const KOR = { langMatch: 'korean', gender: null, artists: [], raw: 'kpop' };
 const KOR_F = { langMatch: 'korean', gender: 'female', artists: [], raw: 'kpop女声' };
@@ -49,6 +49,18 @@ test('detectAppendRequest: 换批/续批/普通方向不命中(应默认换批,�
   for (const m of ['来一批徐佳莹的歌', '下一批', '再来一批', '来一批华语流行', '换一批', '随便放一批', '第一首放偏爱']) {
     assert.equal(detectAppendRequest(m), false, m);
   }
+});
+
+// playlistQuery — far-tier 歌单搜索关键词:口语题材词(命中大歌单),区别于 directionQuery 的语种串。
+test('playlistQuery: 语种 → 口语题材词', () => {
+  assert.equal(playlistQuery(CHN), '华语流行');
+  assert.equal(playlistQuery(CHN_F), '华语流行 女声');
+  assert.equal(playlistQuery(KOR), 'KPOP');
+  assert.equal(playlistQuery({ langMatch: 'english', gender: 'male', artists: [], raw: '' }), '欧美流行 男声');
+});
+test('playlistQuery: 点名艺人 → 用艺人名搜歌单;无方向 → 空串', () => {
+  assert.equal(playlistQuery({ langMatch: 'chinese', gender: null, artists: ['孙燕姿'], raw: '' }), '孙燕姿');
+  assert.equal(playlistQuery(null), '');
 });
 
 test('partially-known collaborations are not hard rejected by gender', () => {

@@ -364,6 +364,20 @@ export function directionQuery(dir) {
   return parts.join(' ');
 }
 
+// 方向 → 用于「歌单搜索」(far-tier 广度源)的关键词。**和 directionQuery 不同**:directionQuery 是
+// 给 RAG 向量匹配用的(空格拼一堆语种词),拿去搜歌单会命中小众子类歌单(实测「中文 国语 华语」
+// 只命中 1~5 万播放的小众单);这里返回口语化题材词 → 命中千万级播放的大歌单 = 主流广度
+//(实测「华语流行」命中 1468 万播放的「华语流行100首」)。点名艺人时用艺人名搜。
+const LANG_PLAYLIST = { chinese: '华语流行', english: '欧美流行', korean: 'KPOP', japanese: '日语' };
+export function playlistQuery(dir) {
+  if (!dir) return '';
+  if (dir.artists && dir.artists.length) return dir.artists[0];   // 点名艺人 → 用艺人名搜歌单
+  const base = LANG_PLAYLIST[dir.langMatch] || '';
+  const g = dir.gender === 'female' ? '女声' : dir.gender === 'male' ? '男声' : '';
+  const kw = [base, g].filter(Boolean).join(' ');
+  return kw || directionQuery(dir);   // 未知语种 → 退回 directionQuery
+}
+
 // 独立自测:node server/direction.js
 import { fileURLToPath } from 'url';
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
