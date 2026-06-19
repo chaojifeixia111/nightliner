@@ -153,7 +153,7 @@ catch 里识别 `ac.signal.aborted`:**不提交任何队列/反馈/记忆**(本�
 | `recommend` | 网易云每日 daily + 2×personal_fm | 去重、30min 缓存、每轮 shuffle 取 20。方向激活时按方向过滤。 |
 | `wildcard` | `discovery.js`(→ `explore-pool.js` + far tier) | **near tier**(simi 近邻 + 同艺人深挖,原 explore-pool 逻辑)+ **far tier**(direction 激活时走 playlist-search / open 时走 similar-artists / 大众榜兜底),affinity 加权重排,limit 24;结果按 focusKey(方向+档位)缓存 30min。`context-builder` 替换原 `buildExplorePool` 直调,缓存未过期时零网络。 |
 
-**Agency 原则**(memory: `feedback_agent_agency_recs`):网易云 `/simi/song` 只作**候选生成**,agent 自己去重/过滤/打散/重排,**绝不照搬外部排序**。explore 排除集 = 已收藏 + anti + cooldown + 最近播放 + **wrong_vibe(负反馈)**。
+**Agency 原则**(memory: `feedback_agent_agency_recs`):网易云 `/simi/song` 只作**候选生成**,agent 自己去重/过滤/打散/重排,**绝不照搬外部排序**。explore 排除集 = 已收藏 + anti + cooldown + 最近播放 + **当前 queue(F7:「下一批」不重复正排着的歌)** + **wrong_vibe(负反馈)**。库内片段 / 每日推荐池也同样剔除当前 queue。
 
 ### 3.4 反馈飞轮(love 持久累积 · 负反馈即时;2026-06-15 重构为 affinity 学习层)
 

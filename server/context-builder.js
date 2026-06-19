@@ -339,6 +339,8 @@ export async function buildChatMessages({
   let newTarget = n - famTarget;             // 其余为全新(不在你收藏里)
   const libKeys = await libraryKeys();        // 复用:既给 explore 排除,也给 server 校验
   const dirMatch = (name, artist) => songMatchesDirection(name, artist, direction);
+  // F7:当前 queue 里正排着的歌全部排除 —— 「下一批」要的是新货,不能把已在队列里的再推一遍。
+  const queueKeys = new Set((currentQueue || []).map(s => songKey(s.title, s.artist)));
 
   // 负反馈:wrong_vibe = 明确不喜欢(别再推)。skip 不再降权(skip 是正常浏览行为)。
   const demoted = wrongVibeSongs();
@@ -356,13 +358,16 @@ export async function buildChatMessages({
 
   // 按 love 亲和度排序库内片段 —— 用户 love 过的艺人/歌曲优先出现在 prompt 靠前位置
   const _songAff = songAffinity(), _artistAff = artistAffinity();
-  librarySlice = [...librarySlice].sort(
-    (a, b) => songWeight({ name: b.name, artist: b.artist }, { songAff: _songAff, artistAff: _artistAff })
-            - songWeight({ name: a.name, artist: a.artist }, { songAff: _songAff, artistAff: _artistAff })
-  );
+  librarySlice = [...librarySlice]
+    .filter(s => !queueKeys.has(songKey(s.name, s.artist)))   // F7:不再推已在 queue 里的库内歌
+    .sort(
+      (a, b) => songWeight({ name: b.name, artist: b.artist }, { songAff: _songAff, artistAff: _artistAff })
+              - songWeight({ name: a.name, artist: a.artist }, { songAff: _songAff, artistAff: _artistAff })
+    );
 
   // 推荐池(网易云每日)按方向过滤 —— 方向是硬约束,跨语种的歌直接不进池。
-  const dirRecommend = direction ? resolvedPool.filter(s => dirMatch(s.name, s.artist)) : resolvedPool;
+  const dirRecommend = (direction ? resolvedPool.filter(s => dirMatch(s.name, s.artist)) : resolvedPool)
+    .filter(s => !queueKeys.has(songKey(s.name, s.artist)));   // F7:推荐池也去掉已在 queue 的
 
   // 「全新」供给 = 相似歌探索池。方向激活时种子取自「该方向收藏曲(带 ncm_id)」→ simi 近邻 +
   // 同艺人深挖天然落在方向内;再对产物按方向过滤,滤掉 simi 漂出去的跨语种歌。
@@ -388,6 +393,7 @@ export async function buildChatMessages({
       for (const a of antiList()) excludeKeys.add(songKey(a.song_title, a.song_artist));
       for (const c of activeCooldowns()) excludeKeys.add(songKey(c.song_title, c.song_artist));
       for (const p of recentPlays(20)) excludeKeys.add(songKey(p.title, p.artist));
+      for (const k of queueKeys) excludeKeys.add(k);  // F7:当前 queue 不再进 explore/深挖
       for (const f of recentFeedback(20)) {
         if (f.signal === 'wrong_vibe' || f.signal === 'never_again') {
           excludeKeys.add(songKey(f.song_title, f.song_artist));
@@ -413,6 +419,9 @@ export async function buildChatMessages({
         if (direction) explorePool = explorePool.filter(c => dirMatch(c.name, c.artist)); // far tier 也按方向过滤
         _discoveryCache.set(focusKey, { ts: Date.now(), pool: explorePool });
       }
+      // F7:explore 池有 30min 缓存,命中缓存时上面的 excludeKeys 不会重跑 → 这里再按当前 queue
+      // 过滤一遍,保证「下一批」即便用的是缓存池,也不会把正排着的歌重新端上来。
+      explorePool = explorePool.filter(c => !queueKeys.has(songKey(c.name, c.artist)));
     }
   }
 
