@@ -376,13 +376,10 @@ app.post('/api/chat', async (req, res) => {
         broadcast({ type: 'now', data: now });
 
         // DJ opening 已通过 dj_stream_* 流式给到前端,这里不再重复广播
-        // Per-song reasons — iterate arranged so card order matches actual queue order
+        // names-only:逐首只报歌名,不显示每首描述。reason 仍留在 queue 数据 / chat_turns 里
+        // 供记忆与幻觉校验,只是不展示。想恢复「每首带描述」时把 text 改回 arranged[i].reason 即可。
         for (let i = 0; i < arranged.length; i++) {
-          const s = arranged[i];
-          const reason = s.reason || '';
-          if (reason) {
-            broadcast({ type: 'dj_message', data: { ts, kind: 'song', title: s.title, text: reason } });
-          }
+          broadcast({ type: 'dj_message', data: { ts, kind: 'song', title: arranged[i].title, text: '' } });
         }
       } else {
         // 护栏:playable 为空 → queue 已保住不变,如实告知而不是静默清空播放

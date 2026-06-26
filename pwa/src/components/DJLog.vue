@@ -18,7 +18,7 @@
         </div>
         <div class="msg-body" :class="bodyClass(msg)">
           <template v-if="msg.kind === 'song'">
-            <span class="song-prefix">{{ msg.title }}</span> — {{ displayText(i, msg) }}
+            <span class="song-prefix">{{ msg.title }}</span><template v-if="displayText(i, msg)"> — {{ displayText(i, msg) }}</template>
           </template>
           <template v-else-if="msg.kind === 'opening' || msg.kind === 'chat_reply'">{{ displayText(i, msg) }}</template>
           <template v-else-if="msg.kind === 'user'">{{ msg.text }}</template>
