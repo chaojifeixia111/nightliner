@@ -1,6 +1,8 @@
 // pwa/src/ws-client.js
 // WS 客户端:断线自动重连(指数退避),并把连接/断开如实汇报给上层,
 // 避免后端重启或网络抖动后 socket 静默死掉、app 卡在"已连接"却收不到任何更新。
+import { wsUrl } from './config.js';
+
 let socket = null;
 let reconnectTimer = null;
 let backoff = 1000;
@@ -11,7 +13,7 @@ export function connectWs(onMessage) {
   manualClose = false;
 
   const open = () => {
-    socket = new WebSocket(`ws://${location.host}/stream`);
+    socket = new WebSocket(wsUrl());
 
     socket.onopen = () => {
       backoff = 1000;                       // 连上即重置退避

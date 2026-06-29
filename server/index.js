@@ -29,6 +29,18 @@ const resolveArtistAlias = makeArtistAliasResolver({ model: config.models.light_
 
 const app = express();
 app.use(express.json());
+
+// CORS:拆开部署时前端在别的域名(如 Vercel),浏览器跨域请求需放行。
+// 浏览器请求不带凭证(网易云 cookie 是服务端自用),用 * 即可;OPTIONS 预检直接 204。
+// 同源自托管时此头无害。要收紧可把 * 换成具体的前端域名。
+app.use((req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 app.use(express.static('pwa/dist')); // 生产构建产物;开发时用 vite proxy
 
 const server = http.createServer(app);
