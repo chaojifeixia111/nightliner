@@ -25,6 +25,7 @@ import { normalizePlayItems } from './chat-guards.js';
 
 const config = yaml.parse(await fs.readFile('config.yaml', 'utf8'));
 const PORT = process.env.PORT || config.server.port; // PORT 环境变量可覆盖(开发/preview 用)
+const AUTH_TOKEN = process.env.AUTH_TOKEN; // 设了才启用访问鉴权(公网部署设;本地开发不设→放行)
 const resolveArtistAlias = makeArtistAliasResolver({ model: config.models.light_command || config.models.chat_mode });
 
 const app = express();
@@ -36,10 +37,21 @@ app.use(express.json());
 app.use((req, res, next) => {
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
+
+// 访问鉴权:设了 AUTH_TOKEN 才校验。前端密码门把口令作为 Bearer 带在每个 /api 请求上。
+// OPTIONS 预检上面已 204 返回,不会到这;静态前端不设防(无敏感内容,且 Vercel 模式下不经此托管)。
+if (AUTH_TOKEN) {
+  app.use('/api', (req, res, next) => {
+    const auth = req.get('authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (token !== AUTH_TOKEN) return res.status(401).json({ error: 'unauthorized' });
+    next();
+  });
+}
 
 app.use(express.static('pwa/dist')); // 生产构建产物;开发时用 vite proxy
 
@@ -171,7 +183,11 @@ function matchesLibrary(title, artist, snapshotNorm) {
   return entries.some(e => e.normName === t && e.normArtist.includes(a));
 }
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  if (AUTH_TOKEN) {
+    const token = new URL(req.url, 'http://x').searchParams.get('token');
+    if (token !== AUTH_TOKEN) { ws.close(4001, 'unauthorized'); return; } // 前端收到 4001 → 弹密码门
+  }
   ws.send(JSON.stringify({ type: 'now', data: now }));
   ws.send(JSON.stringify({ type: 'queue', data: currentQueue }));
   ws.send(JSON.stringify({ type: 'tuning', data: tuning }));

@@ -38,6 +38,7 @@
       @close="discoverOpen = false"
     />
     <ListenPage :open="listenOpen" @close="listenOpen = false" />
+    <AuthGate v-if="needAuth" @submit="onAuthSubmit" />
   </div>
 </template>
 
@@ -51,9 +52,12 @@ import TuningDrawer from './components/TuningDrawer.vue';
 import QueueDrawer from './components/QueueDrawer.vue';
 import DiscoverPage from './components/DiscoverPage.vue';
 import ListenPage from './components/ListenPage.vue';
+import AuthGate from './components/AuthGate.vue';
 import { connectWs, sendFeedback } from './ws-client.js';
+import { setToken } from './config.js';
 
 const connected = ref(false);
+const needAuth = ref(false);
 const tuningOpen = ref(false);
 const queueOpen = ref(false);
 const listenOpen = ref(false);
@@ -122,7 +126,15 @@ function endStream({ id, say, stopped }) {
   if (streamingId.value === id) streamingId.value = null;
 }
 
+function onAuthRequired() { needAuth.value = true; }
+function onAuthSubmit(token) {
+  setToken(token);
+  location.reload(); // 最简稳妥:重载后所有初始请求 + ws 都带上口令重来
+}
+
 onMounted(() => {
+  window.addEventListener('nl-auth-required', onAuthRequired);
+
   ws = connectWs((msg) => {
     if (msg.type === 'connected') connected.value = true;
     if (msg.type === 'disconnected') connected.value = false;
@@ -141,7 +153,10 @@ onMounted(() => {
   fetch('/api/tuning').then(r => r.json()).then(t => Object.assign(state.tuning, t)).catch(() => {});
 });
 
-onUnmounted(() => ws?.close());
+onUnmounted(() => {
+  ws?.close();
+  window.removeEventListener('nl-auth-required', onAuthRequired);
+});
 
 function onFeedback(payload) {
   // backward compat: support string OR object

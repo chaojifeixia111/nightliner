@@ -23,9 +23,13 @@ export function connectWs(onMessage) {
       try { onMessage(JSON.parse(ev.data)); }
       catch (e) { console.error('WS parse error', e, ev.data); }
     };
-    socket.onclose = () => {
+    socket.onclose = (ev) => {
       onMessage({ type: 'disconnected' });  // 让上层把 connected 置 false(masthead 报 OFFLINE)
       if (manualClose) return;              // 组件卸载导致的关闭:不再重连
+      if (ev.code === 4001) {               // 后端拒绝:口令缺失/错误 → 弹密码门,别再重连风暴
+        window.dispatchEvent(new Event('nl-auth-required'));
+        return;
+      }
       clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(open, backoff);
       backoff = Math.min(backoff * 1.5, MAX_BACKOFF);
